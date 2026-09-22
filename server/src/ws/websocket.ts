@@ -211,6 +211,8 @@ export class WSServer extends EventEmitter {
     socket.write(responseHeaders);
 
     const conn = new WSConnection(socket);
+    conn.on("error", (err) => console.error("WebSocket connection error:", err));
+    conn.on("error", (err) => console.error("WebSocket connection error:", err));
     this.connections.add(conn);
     conn.on("close", () => this.connections.delete(conn));
     this.emit("connection", conn, req);
