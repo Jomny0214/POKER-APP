@@ -2,7 +2,7 @@ import { api } from "./api.js";
 import { toast } from "./toast.js";
 import { renderWalletPanel } from "./wallet.js";
 
-export async function renderLobby(root, navigate, onBalanceChange) {
+export async function renderLobby(root, navigate, onBalanceChange, currentUser) {
   root.innerHTML = `
     <div id="wallet-panel-mount"></div>
     <div class="lobby-toolbar">
@@ -12,13 +12,13 @@ export async function renderLobby(root, navigate, onBalanceChange) {
     <div class="lobby-grid" id="lobby-grid">Loading...</div>
   `;
 
-  renderWalletPanel(root.querySelector("#wallet-panel-mount"), onBalanceChange);
+  renderWalletPanel(root.querySelector("#wallet-panel-mount"), onBalanceChange, currentUser);
 
   async function load() {
     const { tables } = await api.tables();
     const grid = root.querySelector("#lobby-grid");
+    if (!grid) return;
     grid.innerHTML = "";
-    // group by variant for readability
     const byVariant = new Map();
     for (const t of tables) {
       if (!byVariant.has(t.variantName)) byVariant.set(t.variantName, []);
@@ -54,4 +54,10 @@ export async function renderLobby(root, navigate, onBalanceChange) {
 
   root.querySelector("#refresh-btn").addEventListener("click", () => load().catch((e) => toast(e.message, "error")));
   await load().catch((e) => toast(e.message, "error"));
+
+  const pollInterval = setInterval(() => {
+    load().catch(() => {});
+  }, 5000);
+
+  return () => clearInterval(pollInterval);
 }

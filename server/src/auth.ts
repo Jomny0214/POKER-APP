@@ -62,6 +62,11 @@ export function destroySession(token: string): void {
   deleteSessionStmt.run(token);
 }
 
+export function isAdmin(user: UserRow): boolean {
+  const adminEmail = (process.env.ADMIN_EMAIL ?? "").toLowerCase().trim();
+  return !!adminEmail && user.email === adminEmail;
+}
+
 export function publicUser(user: UserRow) {
-  return { id: user.id, email: user.email, username: user.username };
+  return { id: user.id, email: user.email, username: user.username, isAdmin: isAdmin(user) };
 }

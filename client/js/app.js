@@ -10,6 +10,7 @@ const headerRight = document.getElementById("header-right");
 
 let currentUser = null;
 let cleanupTableView = null;
+let cleanupLobbyView = null;
 
 function renderHeader(balance) {
   if (!currentUser) {
@@ -45,16 +46,24 @@ function stopTableViewIfActive() {
   }
 }
 
+function stopLobbyViewIfActive() {
+  if (cleanupLobbyView) {
+    cleanupLobbyView();
+    cleanupLobbyView = null;
+  }
+}
+
 async function route() {
   if (!currentUser) return;
   const hash = location.hash.replace(/^#\/?/, "");
   stopTableViewIfActive();
+  stopLobbyViewIfActive();
 
   if (hash.startsWith("table/")) {
     const tableId = hash.slice("table/".length);
     cleanupTableView = renderTable(root, tableId, currentUser, navigate);
   } else {
-    await renderLobby(root, navigate, (balance) => renderHeader(balance));
+    cleanupLobbyView = await renderLobby(root, navigate, (balance) => renderHeader(balance), currentUser);
   }
 }
 

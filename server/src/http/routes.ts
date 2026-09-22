@@ -1,8 +1,8 @@
 import { Router, sendJson, readJsonBody, Ctx } from "./router";
-import { register, login, createSession, destroySession, publicUser, resolveSession } from "../auth";
+import { register, login, createSession, destroySession, publicUser, resolveSession, isAdmin } from "../auth";
 import { getBalance, credit, debit, ledgerHistory, InsufficientFundsError } from "../db/wallet";
 import { tableManager } from "../table/TableManager";
-import { UserExistsError } from "../db/users";
+import { UserExistsError, findByUsername } from "../db/users";
 
 export const router = new Router();
 
@@ -63,12 +63,16 @@ router.get("/api/wallet/history", async (ctx) => {
   sendJson(ctx.res, 200, { entries: ledgerHistory(userId) });
 });
 
-// Stand-in for a real payment processor integration (Stripe, etc). This
-// simply credits chips directly so the app is fully playable end-to-end;
-// swapping in a real processor means calling `credit()`/`debit()` from that
-// processor's webhook handlers instead of this endpoint.
+// Stand-in for a real payment processor integration (Stripe, etc). Only the
+// site admin (ADMIN_EMAIL) can call this now -- everyday players get chips
+// credited to their account by the admin via /api/admin/credit instead.
 router.post("/api/wallet/deposit", async (ctx) => {
   const userId = requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Deposits are managed by the site admin. Ask them to credit your account." });
+    return;
+  }
   const body = ctx.body as { amount?: number };
   const amount = Math.floor(Number(body.amount));
   if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000) {
@@ -77,6 +81,34 @@ router.post("/api/wallet/deposit", async (ctx) => {
   }
   const balance = credit(userId, "deposit", amount, "simulated-deposit");
   sendJson(ctx.res, 200, { balance });
+});
+
+// Admin-only: credit chips directly to another player's account by username.
+router.post("/api/admin/credit", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  const body = ctx.body as { username?: string; amount?: number };
+  const username = (body.username ?? "").trim();
+  const amount = Math.floor(Number(body.amount));
+  if (!username) {
+    sendJson(ctx.res, 400, { error: "Username required" });
+    return;
+  }
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 1_000_000) {
+    sendJson(ctx.res, 400, { error: "Invalid amount" });
+    return;
+  }
+  const target = findByUsername(username);
+  if (!target) {
+    sendJson(ctx.res, 404, { error: "No player with that username" });
+    return;
+  }
+  const balance = credit(target.id, "deposit", amount, `admin-credit-by-${requester.id}`);
+  sendJson(ctx.res, 200, { balance, username: target.username });
 });
 
 router.post("/api/wallet/withdraw", async (ctx) => {

@@ -36,6 +36,10 @@ export function findByEmail(email: string): UserRow | undefined {
   return getByEmailStmt.get(email) as unknown as UserRow | undefined;
 }
 
+export function findByUsername(username: string): UserRow | undefined {
+  return getByUsernameStmt.get(username) as unknown as UserRow | undefined;
+}
+
 export function findById(id: string): UserRow | undefined {
   return getByIdStmt.get(id) as unknown as UserRow | undefined;
 }
