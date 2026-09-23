@@ -2,6 +2,7 @@ import { api, getToken, setToken } from "./api.js";
 import { renderAuth } from "./auth.js";
 import { renderLobby } from "./lobby.js";
 import { renderTable } from "./table.js";
+import { renderTournamentLobby, renderTournamentDetail } from "./tournamentLobby.js";
 import { gameSocket } from "./ws.js";
 import { toast } from "./toast.js";
 
@@ -59,9 +60,18 @@ async function route() {
   stopTableViewIfActive();
   stopLobbyViewIfActive();
 
-  if (hash.startsWith("table/")) {
+  if (hash.startsWith("tournament-table/")) {
+    const rest = hash.slice("tournament-table/".length);
+    const [tournamentId, tableId] = rest.split("/");
+    cleanupTableView = renderTable(root, tableId, currentUser, navigate, { tournamentId });
+  } else if (hash.startsWith("table/")) {
     const tableId = hash.slice("table/".length);
     cleanupTableView = renderTable(root, tableId, currentUser, navigate);
+  } else if (hash.startsWith("tournament/")) {
+    const tournamentId = hash.slice("tournament/".length);
+    cleanupLobbyView = await renderTournamentDetail(root, tournamentId, navigate, currentUser);
+  } else if (hash === "tournaments") {
+    cleanupLobbyView = await renderTournamentLobby(root, navigate, currentUser);
   } else {
     cleanupLobbyView = await renderLobby(root, navigate, (balance) => renderHeader(balance), currentUser);
   }

@@ -2,10 +2,12 @@ import http from "http";
 import path from "path";
 import "./db/database"; // ensure schema is created on boot
 import { handleApi } from "./http/routes";
+import "./http/tournamentRoutes"; // registers /api/tournaments* routes onto the shared router
 import { serveStatic } from "./http/static";
 import { WSServer } from "./ws/websocket";
 import { handleConnection } from "./ws/handlers";
 import { Ctx } from "./http/router";
+import { tournamentManager } from "./tournament/TournamentManager";
 
 const PORT = Number(process.env.PORT ?? 8080);
 const CLIENT_DIR = path.join(__dirname, "..", "..", "client");
@@ -40,6 +42,17 @@ server.on("upgrade", (req, socket, head) => {
 });
 wss.on("connection", (conn) => handleConnection(conn));
 wss.startHeartbeat();
+
+// Recreate any tournament that was mid-flight when the process last exited
+// (tables, seats and stacks are persisted; the current hand in progress at
+// the moment of a restart is not, same as cash tables).
+tournamentManager.init();
+
+// Starts due tournaments, advances blind levels, closes expired rebuy
+// windows and rebalances tables. 15s is frequent enough that a scheduled
+// start or a level change never lags by more than that.
+const TOURNAMENT_TICK_MS = 15_000;
+setInterval(() => tournamentManager.tick(), TOURNAMENT_TICK_MS);
 
 server.listen(PORT, () => {
   console.log(`Poker server listening on http://0.0.0.0:${PORT}`);

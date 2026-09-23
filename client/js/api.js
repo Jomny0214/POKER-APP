@@ -39,4 +39,14 @@ export const api = {
   adminCredit: (username, amount) =>
     request("/api/admin/credit", { method: "POST", body: JSON.stringify({ username, amount }) }),
   tables: () => request("/api/tables"),
+
+  tournamentsMeta: () => request("/api/tournaments/meta"),
+  tournaments: () => request("/api/tournaments"),
+  tournament: (id) => request(`/api/tournaments/${id}`),
+  createTournament: (input) =>
+    request("/api/admin/tournaments", { method: "POST", body: JSON.stringify(input) }),
+  forceEndTournament: (id) => request(`/api/admin/tournaments/${id}/force-end`, { method: "POST" }),
+  registerTournament: (id) => request(`/api/tournaments/${id}/register`, { method: "POST" }),
+  unregisterTournament: (id) => request(`/api/tournaments/${id}/unregister`, { method: "POST" }),
+  rebuyTournament: (id) => request(`/api/tournaments/${id}/rebuy`, { method: "POST" }),
 };

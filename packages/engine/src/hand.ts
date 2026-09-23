@@ -231,6 +231,21 @@ export class HandEngine {
     const committedStreet = new Map<string, number>();
     let order: string[];
 
+    // Tournament-style ante: posted by every active player straight into the
+    // pot (not counted toward the street's "amount to call"), before blinds.
+    // Only ever fires when `forced.ante` is explicitly set, which stud games
+    // handle separately via postAntesAndStartBringIn and cash flop/draw games
+    // never set (see stakes.ts) -- so this is a no-op for existing cash play.
+    if (this.variant.category !== "stud" && this.forced.ante) {
+      for (const id of active) {
+        const p = this.players.get(id)!;
+        const actual = Math.min(this.forced.ante, p.stack);
+        p.stack -= actual;
+        p.committedTotal += actual;
+        if (p.stack === 0) p.allIn = true;
+      }
+    }
+
     if (this.forced.smallBlind !== undefined && this.forced.bigBlind !== undefined) {
       const sb = this.forced.smallBlind;
       const bb = this.forced.bigBlind;

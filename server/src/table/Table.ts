@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { HandEngine, VariantConfig, PublicHandState, PlayerAction } from "@poker/engine";
+import { HandEngine, VariantConfig, PublicHandState, PlayerAction, ForcedBets } from "@poker/engine";
 import { WSConnection } from "../ws/websocket";
 import { credit, debit, withTransaction } from "../db/wallet";
 import { db } from "../db/database";
@@ -32,9 +32,24 @@ const insertHandHistoryStmt = db.prepare(
   `INSERT INTO hand_history (id, table_id, variant, started_at, ended_at, data) VALUES (?, ?, ?, ?, ?, ?)`
 );
 
+export interface TableOptions {
+  /**
+   * Tournament tables reuse this Table class for its hand-play engine, but
+   * differ in how seats/chips work: no wallet-funded buy-ins (chips were
+   * already collected from the wallet at tournament registration), no
+   * cashing a stack back out mid-event, and busting doesn't just clear a
+   * seat -- it's reported up to the tournament so it can decide whether the
+   * player is still inside a rebuy window.
+   */
+  tournamentMode?: boolean;
+  /** tournamentMode only: fired when a seated player's stack hits 0. */
+  onPlayerBusted?: (userId: string, seatIndex: number) => void;
+}
+
 export class Table {
   readonly id = randomUUID();
   readonly seats: (Seat | null)[];
+  readonly origin: "cash" | "tournament";
   private engine: HandEngine | null = null;
   private buttonSeatIndex = 0;
   private subscribers = new Set<Subscriber>();
@@ -42,15 +57,100 @@ export class Table {
   private nextHandTimer: NodeJS.Timeout | null = null;
   private handStartedAt = 0;
   private currentActorSeat: number | null = null;
+  private opts: TableOptions;
+  private forcedOverride: ForcedBets | null = null;
   public onBroadcastError: ((err: unknown) => void) | null = null;
 
   constructor(
     public readonly variant: VariantConfig,
     public readonly stakes: StakesLevel,
     public readonly maxSeats: number = variant.maxPlayers,
-    public readonly name: string = `${variant.name} ${stakes.label}`
+    public readonly name: string = `${variant.name} ${stakes.label}`,
+    opts: TableOptions = {}
   ) {
     this.seats = new Array(maxSeats).fill(null);
+    this.opts = opts;
+    this.origin = opts.tournamentMode ? "tournament" : "cash";
+  }
+
+  /** Sets an explicit blind/ante schedule (tournament tables), overriding the
+   * stakes-derived cash forced bets. Takes effect from the next hand dealt. */
+  setBlinds(smallBlind: number, bigBlind: number, ante: number): void {
+    this.forcedOverride = { smallBlind, bigBlind, ante: ante > 0 ? ante : undefined, smallBet: bigBlind };
+  }
+
+  hasHandInProgress(): boolean {
+    return !!this.engine && !this.engine.isComplete();
+  }
+
+  /** Seats a player at a tournament table without touching the wallet (the
+   * buy-in/rebuy was already collected by the tournament layer). */
+  seatTournamentPlayer(userId: string, username: string, seatIndex: number, stack: number): void {
+    if (!this.opts.tournamentMode) throw new Error("Not a tournament table");
+    if (seatIndex < 0 || seatIndex >= this.maxSeats) throw new Error("Invalid seat");
+    if (this.seats[seatIndex]) throw new Error("Seat already taken");
+    if (this.seatOf(userId)) throw new Error("Already seated at this table");
+    this.seats[seatIndex] = {
+      index: seatIndex,
+      userId,
+      username,
+      stack,
+      sittingOut: false,
+      leavingAfterHand: false,
+    };
+    this.maybeStartHand();
+    this.broadcast();
+  }
+
+  /** Tops a seated (typically busted-and-awaiting-rebuy) player's stack back up. */
+  rebuyPlayer(userId: string, addStack: number): void {
+    const seat = this.seatOf(userId);
+    if (!seat) throw new Error("Not seated at this table");
+    seat.stack += addStack;
+    seat.sittingOut = false;
+    this.maybeStartHand();
+    this.broadcast();
+  }
+
+  /** Finalizes an elimination: clears the seat outright (no wallet credit --
+   * tournament chips only pay out via the prize pool at the end). */
+  eliminateSeat(userId: string): void {
+    const seat = this.seatOf(userId);
+    if (!seat) return;
+    this.seats[seat.index] = null;
+    this.broadcast();
+  }
+
+  firstOpenSeatIndex(): number {
+    return this.seats.findIndex((s) => s === null);
+  }
+
+  /** Table-balancing helper: pulls one occupied seat out (no wallet effect).
+   * Caller is responsible for only calling this between hands. */
+  pullOnePlayer(): { userId: string; username: string; stack: number } | null {
+    for (const seat of this.seats) {
+      if (seat) {
+        const { userId, username, stack } = seat;
+        this.seats[seat.index] = null;
+        this.broadcast();
+        return { userId, username, stack };
+      }
+    }
+    return null;
+  }
+
+  /** Table-balancing helper: pulls every occupied seat out, for breaking a table. */
+  pullAllPlayers(): { userId: string; username: string; stack: number }[] {
+    const out: { userId: string; username: string; stack: number }[] = [];
+    for (let i = 0; i < this.seats.length; i++) {
+      const seat = this.seats[i];
+      if (seat) {
+        out.push({ userId: seat.userId, username: seat.username, stack: seat.stack });
+        this.seats[i] = null;
+      }
+    }
+    this.broadcast();
+    return out;
   }
 
   subscribe(conn: WSConnection, userId: string | null): void {
@@ -72,6 +172,7 @@ export class Table {
   }
 
   sit(userId: string, username: string, seatIndex: number, buyIn: number): void {
+    if (this.opts.tournamentMode) throw new Error("Seats at a tournament table are assigned automatically");
     if (seatIndex < 0 || seatIndex >= this.maxSeats) throw new Error("Invalid seat");
     if (this.seats[seatIndex]) throw new Error("Seat already taken");
     if (this.seatOf(userId)) throw new Error("Already seated at this table");
@@ -98,6 +199,13 @@ export class Table {
   standUp(userId: string): void {
     const seat = this.seatOf(userId);
     if (!seat) return;
+    if (this.opts.tournamentMode) {
+      // No cashing a tournament stack out mid-event -- the only way out is
+      // busting (or the tournament ending). Sitting out just auto-folds the
+      // player's hands via the normal action-timeout path until they either
+      // come back or bust.
+      throw new Error("You can't leave a tournament table -- sit out instead, or wait to bust out");
+    }
     if (this.engine && !this.engine.isComplete()) {
       seat.leavingAfterHand = true;
       seat.sittingOut = true;
@@ -146,7 +254,7 @@ export class Table {
     this.buttonSeatIndex = btnIdx;
 
     const seatOrder = this.orderedFromButton(eligible);
-    const forced = forcedBetsForStakes(this.variant, this.stakes.bigBlind);
+    const forced = this.forcedOverride ?? forcedBetsForStakes(this.variant, this.stakes.bigBlind);
     this.engine = new HandEngine(
       this.variant,
       seatOrder.map((s) => ({ id: s.userId, stack: s.stack })),
@@ -272,8 +380,16 @@ export class Table {
   private removeBustedPlayers(): void {
     for (const seat of this.seats) {
       if (seat && seat.stack <= 0) {
-        // busted: nothing to cash out, just clear the seat
-        this.seats[seat.index] = null;
+        if (this.opts.tournamentMode) {
+          // Leave the seat in place (stack 0 already excludes them from
+          // activeSeats(), so they won't be dealt in) and let the
+          // tournament layer decide: hold the seat open for a rebuy, or
+          // call eliminateSeat() to finalize the elimination.
+          this.opts.onPlayerBusted?.(seat.userId, seat.index);
+        } else {
+          // cash table: busted, nothing to cash out, just clear the seat
+          this.seats[seat.index] = null;
+        }
       }
     }
   }

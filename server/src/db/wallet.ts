@@ -7,7 +7,11 @@ export type LedgerType =
   | "cashout"
   | "hand_win"
   | "hand_loss"
-  | "adjustment";
+  | "adjustment"
+  | "tournament_buyin"
+  | "tournament_cashout"
+  | "tournament_rebuy"
+  | "tournament_payout";
 
 export class InsufficientFundsError extends Error {
   constructor() {

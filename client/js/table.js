@@ -3,6 +3,14 @@ import { cardEl, renderCardRow } from "./cards.js";
 import { toast } from "./toast.js";
 import { api } from "./api.js";
 
+function fmtClock(ms) {
+  if (ms <= 0) return "0:00";
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 function seatPosition(index, maxSeats) {
   // Seats arranged around an ellipse, starting at the bottom-center (index 0)
   // and going clockwise, so "my" seat (when rotated) tends to sit at the bottom.
@@ -15,17 +23,20 @@ function seatPosition(index, maxSeats) {
   return { left: `${x}%`, top: `${y}%` };
 }
 
-export function renderTable(root, tableId, currentUser, navigate) {
+export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
+  const tournamentId = opts.tournamentId ?? null;
+
   root.innerHTML = `
     <div class="table-view-wrap">
       <div class="table-topbar">
-        <button id="back-btn">&larr; Lobby</button>
+        <button id="back-btn">&larr; ${tournamentId ? "Tournament" : "Lobby"}</button>
         <div id="table-title" style="font-weight:700"></div>
         <div>
           <button id="sitout-btn">Sit Out</button>
-          <button id="leave-btn" class="danger">Leave Table</button>
+          ${tournamentId ? "" : `<button id="leave-btn" class="danger">Leave Table</button>`}
         </div>
       </div>
+      ${tournamentId ? `<div class="tourney-sidebar" id="tourney-sidebar">Loading tournament info…</div>` : ""}
       <div class="felt" id="felt">
         <div class="pot-display" id="pot-display"></div>
         <div class="community" id="community"></div>
@@ -39,11 +50,15 @@ export function renderTable(root, tableId, currentUser, navigate) {
 
   root.querySelector("#back-btn").addEventListener("click", () => {
     unsubscribe();
-    navigate("lobby");
+    stopTourneyPoll();
+    navigate(tournamentId ? `tournament/${tournamentId}` : "lobby");
   });
-  root.querySelector("#leave-btn").addEventListener("click", () => {
-    gameSocket.send({ type: "standup", tableId });
-  });
+  const leaveBtn = root.querySelector("#leave-btn");
+  if (leaveBtn) {
+    leaveBtn.addEventListener("click", () => {
+      gameSocket.send({ type: "standup", tableId });
+    });
+  }
 
   let sittingOut = false;
   root.querySelector("#sitout-btn").addEventListener("click", () => {
@@ -51,6 +66,57 @@ export function renderTable(root, tableId, currentUser, navigate) {
     gameSocket.send({ type: "sitout", tableId, value: sittingOut });
     root.querySelector("#sitout-btn").textContent = sittingOut ? "Sit In" : "Sit Out";
   });
+
+  let tourneyPollInterval = null;
+  function stopTourneyPoll() {
+    if (tourneyPollInterval) clearInterval(tourneyPollInterval);
+    tourneyPollInterval = null;
+  }
+  async function pollTourney() {
+    if (!tournamentId) return;
+    try {
+      const t = await api.tournament(tournamentId);
+      renderTourneySidebar(t);
+      if (t.status === "finished" || (t.you.registered && t.you.status === "busted")) {
+        stopTourneyPoll();
+      }
+    } catch {
+      /* transient poll errors are fine, next tick retries */
+    }
+  }
+  function renderTourneySidebar(t) {
+    const bar = root.querySelector("#tourney-sidebar");
+    if (!bar) return;
+    if (t.status === "finished") {
+      bar.innerHTML = `<div class="rank-banner">Tournament finished. ${
+        t.you.finishRank ? `You placed ${t.you.finishRank}${t.you.payout ? ` — paid ${t.you.payout} chips` : ""}.` : ""
+      } <button id="sidebar-standings-btn" class="link-btn">View standings</button></div>`;
+      bar.querySelector("#sidebar-standings-btn")?.addEventListener("click", () => {
+        unsubscribe();
+        navigate(`tournament/${tournamentId}`);
+      });
+      return;
+    }
+    const level = t.currentLevelInfo;
+    const levelEndsAt = (t.levelStartedAt ?? Date.now()) + (level?.durationMinutes ?? 0) * 60000;
+    const remainingMs = levelEndsAt - Date.now();
+    const rankHtml =
+      t.you.status === "busted"
+        ? `<div class="stat rank-banner">You finished ${t.you.finishRank ?? "?"}${t.you.payout ? ` — paid ${t.you.payout}` : ""}</div>`
+        : "";
+    bar.innerHTML = `
+      <div class="stat"><div class="label">Level</div><div class="value">${t.currentLevel + 1}/${t.totalLevels}</div></div>
+      <div class="stat"><div class="label">Blinds</div><div class="value">${level ? `${level.smallBlind}/${level.bigBlind}${level.ante ? ` (${level.ante} ante)` : ""}` : "—"}</div></div>
+      <div class="stat"><div class="label">Next level in</div><div class="value">${fmtClock(remainingMs)}</div></div>
+      <div class="stat"><div class="label">Players left</div><div class="value">${t.entrants.active}</div></div>
+      <div class="stat"><div class="label">Prize pool</div><div class="value">${t.prizePool}</div></div>
+      ${rankHtml}
+    `;
+  }
+  if (tournamentId) {
+    pollTourney();
+    tourneyPollInterval = setInterval(pollTourney, 4000);
+  }
 
   let selectedDiscards = new Set();
   let lastState = null;
@@ -79,8 +145,8 @@ export function renderTable(root, tableId, currentUser, navigate) {
         div.className = "seat-empty";
         div.style.left = pos.left;
         div.style.top = pos.top;
-        const canSit = state.yourSeat === null;
-        div.innerHTML = `<button ${canSit ? "" : "disabled"}>Sit Here</button>`;
+        const canSit = state.yourSeat === null && !tournamentId;
+        div.innerHTML = tournamentId ? "" : `<button ${canSit ? "" : "disabled"}>Sit Here</button>`;
         if (canSit) {
           div.querySelector("button").addEventListener("click", () => promptSit(state, i));
         }
@@ -306,5 +372,8 @@ export function renderTable(root, tableId, currentUser, navigate) {
 
   if (lastState) render(lastState);
 
-  return unsubscribe;
+  return () => {
+    unsubscribe();
+    stopTourneyPoll();
+  };
 }

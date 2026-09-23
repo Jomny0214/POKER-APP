@@ -18,11 +18,28 @@ export class TableManager {
   }
 
   list() {
-    return [...this.tables.values()].map((t) => t.getLobbyInfo());
+    // Tournament tables are assigned automatically and aren't joinable from
+    // the cash lobby, so they're excluded here even though they live in the
+    // same registry (so the existing WS subscribe/action/draw messages work
+    // against them unchanged).
+    return [...this.tables.values()]
+      .filter((t) => t.origin === "cash")
+      .map((t) => t.getLobbyInfo());
   }
 
   get(id: string): Table | undefined {
     return this.tables.get(id);
+  }
+
+  /** Registers a tournament table so the existing WS handlers (subscribe,
+   * sit/standup/action/draw dispatch on tableManager.get(tableId)) work
+   * against it exactly like a cash table. */
+  addTournamentTable(table: Table): void {
+    this.tables.set(table.id, table);
+  }
+
+  removeTournamentTable(id: string): void {
+    this.tables.delete(id);
   }
 }
 

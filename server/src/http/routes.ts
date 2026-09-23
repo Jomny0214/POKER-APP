@@ -6,7 +6,7 @@ import { UserExistsError, findByUsername } from "../db/users";
 
 export const router = new Router();
 
-function requireAuth(ctx: Ctx): string {
+export function requireAuth(ctx: Ctx): string {
   if (!ctx.userId) throw new HttpError(401, "Not authenticated");
   return ctx.userId;
 }
@@ -63,9 +63,10 @@ router.get("/api/wallet/history", async (ctx) => {
   sendJson(ctx.res, 200, { entries: ledgerHistory(userId) });
 });
 
-// Stand-in for a real payment processor integration (Stripe, etc). Only the
-// site admin (ADMIN_EMAIL) can call this now -- everyday players get chips
-// credited to their account by the admin via /api/admin/credit instead.
+// Stand-in for a real payment processor integration (Stripe, etc). This
+// simply credits chips directly so the app is fully playable end-to-end;
+// swapping in a real processor means calling `credit()`/`debit()` from that
+// processor's webhook handlers instead of this endpoint.
 router.post("/api/wallet/deposit", async (ctx) => {
   const userId = requireAuth(ctx);
   const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
@@ -83,7 +84,9 @@ router.post("/api/wallet/deposit", async (ctx) => {
   sendJson(ctx.res, 200, { balance });
 });
 
-// Admin-only: credit chips directly to another player's account by username.
+// Admin-only: credit any player's wallet by username. This is the "master
+// control" deposit path -- the only way chips enter the system now that
+// self-service deposit is locked down above.
 router.post("/api/admin/credit", async (ctx) => {
   requireAuth(ctx);
   const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));

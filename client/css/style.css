@@ -324,3 +324,84 @@ input, select {
   text-decoration: underline;
   padding: 0;
 }
+
+/* ---------- Nav tabs ---------- */
+.nav-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+.nav-tabs button { background: transparent; border: 1px solid #2c4353; }
+.nav-tabs button.active { background: var(--accent-2); color: #06261a; font-weight: 700; }
+
+/* ---------- Tournaments ---------- */
+.tourney-section h3 {
+  margin: 18px 0 10px 0;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.tourney-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+}
+.tourney-card {
+  background: var(--panel);
+  border: 1px solid #24333f;
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+}
+.tourney-card:hover { border-color: var(--accent); }
+.tourney-card h3 { margin: 0; font-size: 16px; color: var(--text); }
+.status-pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
+.status-pill.registering { background: #2c4353; color: var(--accent-2); }
+.status-pill.running { background: #3a2c14; color: var(--accent); }
+.status-pill.finished { background: #24333f; color: var(--text-dim); }
+.status-pill.canceled { background: #3a1f1f; color: var(--danger); }
+
+.tourney-detail {
+  max-width: 760px;
+  margin: 0 auto;
+}
+.tourney-detail .panel {
+  background: var(--panel);
+  border: 1px solid #24333f;
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+.tourney-detail .stat-row { display: flex; flex-wrap: wrap; gap: 18px; margin: 10px 0; }
+.tourney-detail .stat { min-width: 110px; }
+.tourney-detail .stat .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; }
+.tourney-detail .stat .value { font-size: 18px; font-weight: 700; color: var(--accent); }
+
+.standings-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.standings-table th, .standings-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #24333f; }
+.standings-table th { color: var(--text-dim); font-weight: 600; font-size: 11px; text-transform: uppercase; }
+.standings-table tr.you { background: rgba(226,185,59,0.08); }
+.standings-table tr.busted { color: var(--text-dim); }
+
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.form-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-dim); }
+.form-grid label.span-2 { grid-column: 1 / -1; }
+.form-grid input, .form-grid select, .form-grid textarea { font-size: 14px; }
+.form-grid textarea { min-height: 90px; font-family: monospace; font-size: 12px; }
+
+.tourney-sidebar {
+  width: 100%;
+  max-width: 920px;
+  background: var(--panel);
+  border: 1px solid #24333f;
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: center;
+  font-size: 13px;
+}
+.tourney-sidebar .stat .label { font-size: 10px; color: var(--text-dim); text-transform: uppercase; }
+.tourney-sidebar .stat .value { font-weight: 700; color: var(--accent); }
+.tourney-sidebar .rank-banner { color: var(--accent); font-weight: 700; }

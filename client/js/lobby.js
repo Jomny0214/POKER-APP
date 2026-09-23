@@ -5,6 +5,10 @@ import { renderWalletPanel } from "./wallet.js";
 export async function renderLobby(root, navigate, onBalanceChange, currentUser) {
   root.innerHTML = `
     <div id="wallet-panel-mount"></div>
+    <div class="nav-tabs">
+      <button class="active" id="nav-cash">Cash Tables</button>
+      <button id="nav-tourneys">Tournaments</button>
+    </div>
     <div class="lobby-toolbar">
       <h2 style="margin:0">Tables</h2>
       <button id="refresh-btn">Refresh</button>
@@ -12,13 +16,15 @@ export async function renderLobby(root, navigate, onBalanceChange, currentUser) 
     <div class="lobby-grid" id="lobby-grid">Loading...</div>
   `;
 
+  root.querySelector("#nav-tourneys").addEventListener("click", () => navigate("tournaments"));
+
   renderWalletPanel(root.querySelector("#wallet-panel-mount"), onBalanceChange, currentUser);
 
   async function load() {
     const { tables } = await api.tables();
     const grid = root.querySelector("#lobby-grid");
-    if (!grid) return;
     grid.innerHTML = "";
+    // group by variant for readability
     const byVariant = new Map();
     for (const t of tables) {
       if (!byVariant.has(t.variantName)) byVariant.set(t.variantName, []);
