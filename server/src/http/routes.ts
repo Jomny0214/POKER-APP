@@ -2,7 +2,7 @@ import { Router, sendJson, readJsonBody, Ctx } from "./router";
 import { register, login, createSession, destroySession, publicUser, resolveSession, isAdmin } from "../auth";
 import { getBalance, credit, debit, ledgerHistory, InsufficientFundsError } from "../db/wallet";
 import { tableManager } from "../table/TableManager";
-import { UserExistsError, findByUsername } from "../db/users";
+import { UserExistsError, findByUsername, listAll } from "../db/users";
 
 export const router = new Router();
 
@@ -63,10 +63,6 @@ router.get("/api/wallet/history", async (ctx) => {
   sendJson(ctx.res, 200, { entries: ledgerHistory(userId) });
 });
 
-// Stand-in for a real payment processor integration (Stripe, etc). This
-// simply credits chips directly so the app is fully playable end-to-end;
-// swapping in a real processor means calling `credit()`/`debit()` from that
-// processor's webhook handlers instead of this endpoint.
 router.post("/api/wallet/deposit", async (ctx) => {
   const userId = requireAuth(ctx);
   const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
@@ -84,9 +80,19 @@ router.post("/api/wallet/deposit", async (ctx) => {
   sendJson(ctx.res, 200, { balance });
 });
 
-// Admin-only: credit any player's wallet by username. This is the "master
-// control" deposit path -- the only way chips enter the system now that
-// self-service deposit is locked down above.
+// Admin-only: list every registered player and their current balance, so the
+// admin can see exactly who exists before crediting them.
+router.get("/api/admin/players", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  const players = listAll().map((u) => ({ username: u.username, balance: getBalance(u.id) }));
+  sendJson(ctx.res, 200, { players });
+});
+
 router.post("/api/admin/credit", async (ctx) => {
   requireAuth(ctx);
   const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));

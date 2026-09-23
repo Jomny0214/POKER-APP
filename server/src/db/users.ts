@@ -16,6 +16,7 @@ const insertUserStmt = db.prepare(
 const getByEmailStmt = db.prepare(`SELECT * FROM users WHERE email = ?`);
 const getByUsernameStmt = db.prepare(`SELECT * FROM users WHERE username = ?`);
 const getByIdStmt = db.prepare(`SELECT * FROM users WHERE id = ?`);
+const listAllStmt = db.prepare(`SELECT * FROM users ORDER BY username COLLATE NOCASE`);
 
 export class UserExistsError extends Error {
   constructor() {
@@ -36,10 +37,14 @@ export function findByEmail(email: string): UserRow | undefined {
   return getByEmailStmt.get(email) as unknown as UserRow | undefined;
 }
 
+export function findById(id: string): UserRow | undefined {
+  return getByIdStmt.get(id) as unknown as UserRow | undefined;
+}
+
 export function findByUsername(username: string): UserRow | undefined {
   return getByUsernameStmt.get(username) as unknown as UserRow | undefined;
 }
 
-export function findById(id: string): UserRow | undefined {
-  return getByIdStmt.get(id) as unknown as UserRow | undefined;
+export function listAll(): UserRow[] {
+  return listAllStmt.all() as unknown as UserRow[];
 }

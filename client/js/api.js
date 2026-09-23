@@ -38,6 +38,7 @@ export const api = {
   withdraw: (amount) => request("/api/wallet/withdraw", { method: "POST", body: JSON.stringify({ amount }) }),
   adminCredit: (username, amount) =>
     request("/api/admin/credit", { method: "POST", body: JSON.stringify({ username, amount }) }),
+  adminPlayers: () => request("/api/admin/players"),
   tables: () => request("/api/tables"),
 
   tournamentsMeta: () => request("/api/tournaments/meta"),
