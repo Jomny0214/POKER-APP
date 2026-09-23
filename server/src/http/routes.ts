@@ -1,8 +1,15 @@
-import { Router, sendJson, readJsonBody, Ctx } from "./router";
+ímport { Router, sendJson, readJsonBody, Ctx } from "./router";
 import { register, login, createSession, destroySession, publicUser, resolveSession, isAdmin } from "../auth";
 import { getBalance, credit, debit, ledgerHistory, InsufficientFundsError } from "../db/wallet";
 import { tableManager } from "../table/TableManager";
 import { UserExistsError, findByUsername, listAll } from "../db/users";
+import {
+  createDepositRequest,
+  listMyDepositRequests,
+  listPendingDepositRequests,
+  approveDepositRequest,
+  rejectDepositRequest,
+} from "../db/deposits";
 
 export const router = new Router();
 
@@ -142,6 +149,69 @@ router.post("/api/wallet/withdraw", async (ctx) => {
 
 router.get("/api/tables", async (ctx) => {
   sendJson(ctx.res, 200, { tables: tableManager.list() });
+});
+
+// Player submits a claim that they made a real bank transfer. This does NOT
+// credit chips -- it only creates a pending request the admin reviews.
+router.post("/api/deposits/request", async (ctx) => {
+  const userId = requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  const body = ctx.body as { amount?: number; note?: string };
+  try {
+    const request = createDepositRequest(userId, requester?.username ?? "", Number(body.amount), body.note);
+    sendJson(ctx.res, 201, { request });
+  } catch (err) {
+    sendJson(ctx.res, 400, { error: (err as Error).message });
+  }
+});
+
+// Player sees their own deposit requests (pending/approved/rejected).
+router.get("/api/deposits/mine", async (ctx) => {
+  const userId = requireAuth(ctx);
+  sendJson(ctx.res, 200, { requests: listMyDepositRequests(userId) });
+});
+
+// Admin-only: every currently pending deposit request, across all players.
+router.get("/api/admin/deposits/pending", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  sendJson(ctx.res, 200, { requests: listPendingDepositRequests() });
+});
+
+// Admin-only: confirms the real bank transfer arrived -- credits chips.
+router.post("/api/admin/deposits/:id/approve", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  try {
+    const request = approveDepositRequest(Number(ctx.params.id), requester.id);
+    sendJson(ctx.res, 200, { request });
+  } catch (err) {
+    sendJson(ctx.res, 400, { error: (err as Error).message });
+  }
+});
+
+// Admin-only: declines a request (no matching transfer found) -- no chips move.
+router.post("/api/admin/deposits/:id/reject", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  try {
+    const request = rejectDepositRequest(Number(ctx.params.id), requester.id);
+    sendJson(ctx.res, 200, { request });
+  } catch (err) {
+    sendJson(ctx.res, 400, { error: (err as Error).message });
+  }
 });
 
 export async function handleApi(ctx: Ctx): Promise<boolean> {

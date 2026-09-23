@@ -134,3 +134,22 @@ CREATE TABLE IF NOT EXISTS tournament_tables (
   PRIMARY KEY (tournament_id, table_no)
 );
 `);
+
+// Player-submitted "I made a bank transfer" claims. Nothing here touches the
+// wallet ledger -- an admin reviews each pending row against their real bank
+// account and only then approves it (which credits chips) or rejects it.
+db.exec(`
+CREATE TABLE IF NOT EXISTS deposit_requests (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  username TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  note TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at INTEGER NOT NULL,
+  resolved_at INTEGER,
+  resolved_by TEXT
+);
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_deposit_requests_user ON deposit_requests(user_id, id);`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_deposit_requests_status ON deposit_requests(status, id);`);
