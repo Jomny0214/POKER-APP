@@ -16,6 +16,21 @@
 
   <div id="toast-container"></div>
 
+  <script>
+    window.addEventListener("error", (e) => {
+      var el = document.getElementById("app-root");
+      if (el) el.innerHTML =
+        '<pre style="color:#fff;background:#611;padding:16px;white-space:pre-wrap;border-radius:8px;">JS ERROR:\n' +
+        (e.message || "") + "\n" + (e.filename || "") + ":" + (e.lineno || "") + ":" + (e.colno || "") +
+        "\n" + (e.error && e.error.stack ? e.error.stack : "") + "</pre>";
+    });
+    window.addEventListener("unhandledrejection", (e) => {
+      var el = document.getElementById("app-root");
+      if (el) el.innerHTML =
+        '<pre style="color:#fff;background:#611;padding:16px;white-space:pre-wrap;border-radius:8px;">PROMISE ERROR:\n' +
+        (e.reason && e.reason.stack ? e.reason.stack : String(e.reason)) + "</pre>";
+    });
+  </script>
   <script type="module" src="/js/app.js"></script>
 </body>
 </html>
