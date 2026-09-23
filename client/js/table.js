@@ -121,6 +121,69 @@ export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
   let selectedDiscards = new Set();
   let lastState = null;
 
+  // ---- Community card reveal staging ------------------------------------
+  // When a hand runs straight through to showdown (everyone's all-in), the
+  // server deals every remaining street in one synchronous burst and the
+  // client receives the final board in a single state update. Dumping all
+  // five cards on screen at once feels wrong, so instead we detect a
+  // multi-street jump here and reveal it in stages -- flop together, then a
+  // beat, then the turn, then a beat, then the river -- same as a live deal.
+  let displayedCommunity = [];
+  let communityRevealTimers = [];
+  let firstCommunityRender = true;
+
+  function clearCommunityTimers() {
+    communityRevealTimers.forEach((t) => clearTimeout(t));
+    communityRevealTimers = [];
+  }
+
+  function updateCommunity(target) {
+    const communityEl = root.querySelector("#community");
+
+    if (firstCommunityRender) {
+      firstCommunityRender = false;
+      clearCommunityTimers();
+      displayedCommunity = target;
+      renderCardRow(communityEl, displayedCommunity, "community-card");
+      return;
+    }
+
+    if (target.length < displayedCommunity.length || target.length === 0) {
+      clearCommunityTimers();
+      displayedCommunity = [];
+      renderCardRow(communityEl, [], "community-card");
+      if (target.length === 0) return;
+    }
+
+    if (target.length === displayedCommunity.length) return;
+
+    clearCommunityTimers();
+
+    const groups = [];
+    let cursor = displayedCommunity.length;
+    if (cursor === 0 && target.length >= 3) {
+      groups.push(target.slice(0, 3));
+      cursor = 3;
+    }
+    while (cursor < target.length) {
+      groups.push(target.slice(cursor, cursor + 1));
+      cursor += 1;
+    }
+
+    const STEP_MS = 650;
+    let delay = 0;
+    let shownSoFar = displayedCommunity.length;
+    groups.forEach((group) => {
+      const t = setTimeout(() => {
+        shownSoFar += group.length;
+        displayedCommunity = target.slice(0, shownSoFar);
+        renderCardRow(communityEl, displayedCommunity, "community-card");
+      }, delay);
+      communityRevealTimers.push(t);
+      delay += STEP_MS;
+    });
+  }
+
   function onState(state) {
     lastState = state;
     render(state);
@@ -214,7 +277,7 @@ export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
 
     root.querySelector("#pot-display").textContent = state.hand ? `Pot: ${state.hand.pot}` : "";
     root.querySelector("#phase-display").textContent = state.hand ? phaseLabel(state.hand.phase) : "Waiting for players";
-    renderCardRow(root.querySelector("#community"), state.hand?.community ?? [], "community-card");
+    updateCommunity(state.hand?.community ?? []);
 
     renderShowdown(state);
     renderDrawPicker(state);
@@ -375,5 +438,6 @@ export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
   return () => {
     unsubscribe();
     stopTourneyPoll();
+    clearCommunityTimers();
   };
 }
