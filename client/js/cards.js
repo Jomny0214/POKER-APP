@@ -4,7 +4,6 @@ export function cardEl(code, extraClass = "") {
   const div = document.createElement("div");
   if (code === "??" || !code) {
     div.className = `card back ${extraClass}`;
-tail -n 15 client/js/table.js
     div.innerHTML = `<div class="card-back-pattern"></div>`;
     return div;
   }
