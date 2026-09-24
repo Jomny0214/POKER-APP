@@ -50,4 +50,11 @@ export const api = {
   registerTournament: (id) => request(`/api/tournaments/${id}/register`, { method: "POST" }),
   unregisterTournament: (id) => request(`/api/tournaments/${id}/unregister`, { method: "POST" }),
   rebuyTournament: (id) => request(`/api/tournaments/${id}/rebuy`, { method: "POST" }),
+
+  requestDeposit: (amount, note) =>
+    request("/api/deposits/request", { method: "POST", body: JSON.stringify({ amount, note }) }),
+  myDeposits: () => request("/api/deposits/mine"),
+  adminPendingDeposits: () => request("/api/admin/deposits/pending"),
+  adminApproveDeposit: (id) => request(`/api/admin/deposits/${id}/approve`, { method: "POST" }),
+  adminRejectDeposit: (id) => request(`/api/admin/deposits/${id}/reject`, { method: "POST" }),
 };
