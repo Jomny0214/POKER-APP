@@ -102,7 +102,11 @@ export function renderDepositPanel(container, currentUser) {
   }
 
   if (isAdmin) {
-    refreshPending().catch((e) => toast(e.message, "error"));
+    refreshPending().catch((e) => {
+      toast(e.message, "error");
+      const list = container.querySelector("#admin-pending-list");
+      if (list) list.textContent = "Error: " + e.message;
+    });
     const poll = setInterval(() => refreshPending().catch(() => {}), 8000);
     container._depositsCleanup = () => clearInterval(poll);
   } else {
