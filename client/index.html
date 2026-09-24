@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Apex Poker</title>
+  <title>Apex Poker — Built for real poker</title>
+  <meta name="description" content="Apex Poker. Built for real poker. The only platform engineered with absolute randomness for true card play." />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#0f1720" />
   <link rel="icon" href="/icons/icon-192.png" />
@@ -12,39 +13,63 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Apex Poker" />
   <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    #app-header .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #app-header .brand-logo {
+      width: 34px;
+      height: 34px;
+      border-radius: 6px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+    #app-header .brand-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.15;
+    }
+    #app-header .brand-name {
+      font-weight: 700;
+      font-size: 16px;
+    }
+    #app-header .brand-tagline {
+      font-size: 10px;
+      color: var(--text-dim, #9aa5b1);
+      font-weight: 400;
+    }
+  </style>
 </head>
 <body>
   <header id="app-header">
-    <div class="brand">♠ Apex Poker</div>
+    <div class="brand">
+      <img src="/icons/icon-192.png" class="brand-logo" alt="Apex Poker logo" />
+      <div class="brand-text">
+        <span class="brand-name">Apex Poker</span>
+        <span class="brand-tagline">Built for real poker.</span>
+      </div>
+    </div>
     <div id="header-right" class="header-right"></div>
   </header>
-
   <main id="app-root"></main>
-
   <div id="toast-container"></div>
-
   <script>
     window.addEventListener("error", (e) => {
-      var el = document.getElementById("app-root");
-      if (el) el.innerHTML =
-        '<pre style="color:#fff;background:#611;padding:16px;white-space:pre-wrap;border-radius:8px;">JS ERROR:\n' +
-        (e.message || "") + "\n" + (e.filename || "") + ":" + (e.lineno || "") + ":" + (e.colno || "") +
-        "\n" + (e.error && e.error.stack ? e.error.stack : "") + "</pre>";
-    });
-    window.addEventListener("unhandledrejection", (e) => {
-      var el = document.getElementById("app-root");
-      if (el) el.innerHTML =
-        '<pre style="color:#fff;background:#611;padding:16px;white-space:pre-wrap;border-radius:8px;">PROMISE ERROR:\n' +
-        (e.reason && e.reason.stack ? e.reason.stack : String(e.reason)) + "</pre>";
+      const el = document.getElementById("app-root");
+      if (el && !el.dataset.hadError) {
+        el.dataset.hadError = "1";
+        el.innerHTML = "<pre style='color:#e74c3c;padding:16px;white-space:pre-wrap'>" +
+          (e.error && e.error.stack ? e.error.stack : e.message) + "</pre>";
+      }
     });
   </script>
   <script type="module" src="/js/app.js"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/sw.js").catch(() => {
-          /* PWA install just won't be offered; app still works fine */
-        });
+        navigator.serviceWorker.register("/sw.js").catch(() => {});
       });
     }
   </script>
