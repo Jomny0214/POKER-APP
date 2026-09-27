@@ -2,11 +2,15 @@ import { api } from "./api.js";
 import { toast } from "./toast.js";
 import { renderWalletPanel } from "./wallet.js";
 import { renderDepositPanel } from "./deposits.js";
+import { renderPlayerLog } from "./playerlog.js";
+import { renderChatPanel } from "./chat.js";
 
 export async function renderLobby(root, navigate, onBalanceChange, currentUser) {
   root.innerHTML = `
     <div id="wallet-panel-mount"></div>
     <div id="deposit-panel-mount"></div>
+    <div id="player-log-mount"></div>
+    <div id="chat-panel-mount"></div>
     <div class="nav-tabs">
       <button class="active" id="nav-cash">Cash Tables</button>
       <button id="nav-tourneys">Tournaments</button>
@@ -22,6 +26,8 @@ export async function renderLobby(root, navigate, onBalanceChange, currentUser) 
 
   renderWalletPanel(root.querySelector("#wallet-panel-mount"), onBalanceChange, currentUser);
   renderDepositPanel(root.querySelector("#deposit-panel-mount"), currentUser);
+  renderPlayerLog(root.querySelector("#player-log-mount"), currentUser);
+  renderChatPanel(root.querySelector("#chat-panel-mount"), currentUser);
 
   async function load() {
     const { tables } = await api.tables();

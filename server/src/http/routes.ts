@@ -10,6 +10,14 @@ import {
   approveDepositRequest,
   rejectDepositRequest,
 } from "../db/deposits";
+import {
+  sendPlayerMessage,
+  sendAdminMessage,
+  listMessagesForUser,
+  listChatThreads,
+  markThreadReadByAdmin,
+  markThreadReadByPlayer,
+} from "../db/chat";
 
 export const router = new Router();
 
@@ -101,7 +109,38 @@ router.get("/api/admin/players", async (ctx) => {
 });
 
 router.post("/api/admin/credit", async (ctx) => {
-  requireAuth(ctx);
+  requireAuth(ctx);python3 - << 'PY'
+  path = "client/js/lobby.js"
+  with open(path) as f:
+      content = f.read()
+
+      if "player-log-mount" in content:
+          print("Already present, skipping.")
+          else:
+              import_anchor = 'import { renderDepositPanel } from "./deposits.js";'
+                  call_anchor = 'renderDepositPanel(root.querySelector("#deposit-panel-mount"), currentUser);'
+                      div_anchor = '<div id="deposit-panel-mount"></div>'
+
+                          if import_anchor not in content or call_anchor not in content or div_anchor not in content:
+                                  print("ANCHOR NOT FOUND -- stop and tell Claude, do not proceed further.")
+                                      else:
+                                              content = content.replace(
+                                                          import_anchor,
+                                                                      import_anchor + '\nimport { renderPlayerLog } from "./playerlog.js";'
+                                                                              )
+                                                                                      content = content.replace(
+                                                                                                  div_anchor,
+                                                                                                              div_anchor + '\n    <div id="player-log-mount"></div>'
+                                                                                                                      )
+                                                                                                                              content = content.replace(
+                                                                                                                                          call_anchor,
+                                                                                                                                                      call_anchor + '\n  renderPlayerLog(root.querySelector("#player-log-mount"), currentUser);'
+                                                                                                                                                              )
+                                                                                                                                                                      with open(path, "w") as f:
+                                                                                                                                                                                  f.write(content)
+                                                                                                                                                                                          print("lobby.js updated OK")
+                                                                                                                                                                                          PY
+                                                                                                                                                                                          
   const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
   if (!requester || !isAdmin(requester)) {
     sendJson(ctx.res, 403, { error: "Admin only" });
@@ -210,6 +249,91 @@ router.post("/api/admin/deposits/:id/reject", async (ctx) => {
     const request = rejectDepositRequest(Number(ctx.params.id), requester.id);
     sendJson(ctx.res, 200, { request });
   } catch (err) {
+    sendJson(ctx.res, 400, { error: (err as Error).message });
+  }
+});
+
+router.post("/api/chat/send", async (ctx) => {
+  const userId = requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester) {
+    sendJson(ctx.res, 401, { error: "Not authenticated" });
+    return;
+  }
+  const body = ctx.body as { message?: string };
+  try {
+    const msg = sendPlayerMessage(userId, requester.username, body.message ?? "");
+    sendJson(ctx.res, 200, { message: msg });
+  } catch (err) {
+    sendJson(ctx.res, 400, { error: (err as Error).message });
+  }
+});
+
+router.get("/api/chat/mine", async (ctx) => {
+  const userId = requireAuth(ctx);
+  const messages = listMessagesForUser(userId);
+  markThreadReadByPlayer(userId);
+  sendJson(ctx.res, 200, { messages });
+});
+
+router.get("/api/admin/chat/threads", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  const threads = listChatThreads();
+  sendJson(ctx.res, 200, { threads });
+});
+
+router.get("/api/admin/chat/:userId", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  const messages = listMessagesForUser(ctx.params.userId);
+  markThreadReadByAdmin(ctx.params.userId);
+  sendJson(ctx.res, 200, { messages });
+});
+
+router.post("/api/admin/chat/:userId/send", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  const body = ctx.body as { message?: string; username?: string };
+  try {
+    const msg = sendAdminMessage(ctx.params.userId, body.username ?? "Player", body.message ?? "");
+    sendJson(ctx.res, 200, { message: msg });
+python3 - << 'PY'
+path = "client/js/api.js"
+with open(path) as f:
+    content = f.read()
+    
+    if "chatSend:" in content:
+        print("Already present, skipping.")
+        else:
+            addition = """
+              chatSend: (message) =>
+                  request("/api/chat/send", { method: "POST", body: JSON.stringify({ message }) }),
+                    chatMine: () => request("/api/chat/mine"),
+                      adminChatThreads: () => request("/api/admin/chat/threads"),
+                        adminChatThread: (userId) => request(`/api/admin/chat/${userId}`),
+                          adminChatSend: (userId, username, message) =>
+                              request(`/api/admin/chat/${userId}/send`, { method: "POST", body: JSON.stringify({ username, message }) }),
+                              """
+                                  idx = content.rindex("};")
+                                      content = content[:idx] + addition + content[idx:]
+                                          with open(path, "w") as f:
+                                                  f.write(content)
+                                                      print("api.js updated OK (chat methods added)")
+                                                      PY
+                                                        } catch (err) {
     sendJson(ctx.res, 400, { error: (err as Error).message });
   }
 });

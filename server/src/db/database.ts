@@ -153,3 +153,18 @@ CREATE TABLE IF NOT EXISTS deposit_requests (
 `);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_deposit_requests_user ON deposit_requests(user_id, id);`);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_deposit_requests_status ON deposit_requests(status, id);`);
+
+db.exec(`
+CREATE TABLE IF NOT EXISTS chat_messages (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  username TEXT NOT NULL,
+  sender TEXT NOT NULL,
+  message TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  read_by_admin INTEGER NOT NULL DEFAULT 0,
+  read_by_player INTEGER NOT NULL DEFAULT 0
+);
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_chat_messages_user ON chat_messages(user_id, id);`);
+

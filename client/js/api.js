@@ -57,4 +57,12 @@ export const api = {
   adminPendingDeposits: () => request("/api/admin/deposits/pending"),
   adminApproveDeposit: (id) => request(`/api/admin/deposits/${id}/approve`, { method: "POST" }),
   adminRejectDeposit: (id) => request(`/api/admin/deposits/${id}/reject`, { method: "POST" }),
+
+  chatSend: (message) =>
+    request("/api/chat/send", { method: "POST", body: JSON.stringify({ message }) }),
+  chatMine: () => request("/api/chat/mine"),
+  adminChatThreads: () => request("/api/admin/chat/threads"),
+  adminChatThread: (userId) => request(`/api/admin/chat/${userId}`),
+  adminChatSend: (userId, username, message) =>
+    request(`/api/admin/chat/${userId}/send`, { method: "POST", body: JSON.stringify({ username, message }) }),
 };
