@@ -40,6 +40,8 @@ export const api = {
     request("/api/admin/credit", { method: "POST", body: JSON.stringify({ username, amount }) }),
   adminPlayers: () => request("/api/admin/players"),
   adminHouseRevenue: () => request("/api/admin/house-revenue"),
+  adminCollusionFlags: () => request("/api/admin/collusion-flags"),
+  adminResolveCollusionFlag: (id) => request(`/api/admin/collusion-flags/${id}/resolve`, { method: "POST" }),
   tables: () => request("/api/tables"),
 
   tournamentsMeta: () => request("/api/tournaments/meta"),
