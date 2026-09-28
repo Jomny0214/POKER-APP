@@ -186,3 +186,28 @@ CREATE TABLE IF NOT EXISTS house_revenue (
 `);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_house_revenue_kind ON house_revenue(kind, id);`);
 
+// `users` already exists in every live deployment, so a new column needs an
+// ALTER TABLE (CREATE TABLE IF NOT EXISTS above only helps on a brand-new
+// database) -- guarded because SQLite errors on re-adding an existing column,
+// and this file re-runs every server boot.
+try {
+  db.exec(`ALTER TABLE users ADD COLUMN deleted_at INTEGER;`);
+} catch {
+  // column already exists
+}
+
+// One-time-use tokens for the "forgot password" email flow. A row is
+// consumed (used = 1) the moment it's redeemed, and a fresh request
+// invalidates any earlier outstanding token for that user (see
+// db/passwordReset.ts), so only the most recently emailed link ever works.
+db.exec(`
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  token TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  used INTEGER NOT NULL DEFAULT 0
+);
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_password_reset_user ON password_reset_tokens(user_id, created_at);`);
+
