@@ -22,13 +22,18 @@ export function renderDepositPanel(container, currentUser) {
         isAdmin
           ? `<div id="admin-pending-list">Loading...</div>`
           : `
-      <div class="row">
-        <input id="dep-amount" type="number" min="1" placeholder="Amount" value="500" />
-        <input id="dep-note" type="text" placeholder="Note (optional, e.g. bank ref)" />
-        <button class="primary" id="dep-request-btn">Request Deposit</button>
+      <div id="dep-kyc-gate" style="display:none;font-size:12px;color:var(--danger);margin-bottom:8px">
+        Identity verification is required before depositing. Complete it above under "Identity Verification" first.
       </div>
-      <div class="meta" style="font-size:12px;color:var(--text-dim);margin-top:6px">
-        Make your bank transfer first, then submit a request here. The admin will confirm the transfer arrived and credit your chips.
+      <div id="dep-form-row">
+        <div class="row">
+          <input id="dep-amount" type="number" min="1" placeholder="Amount" value="500" />
+          <input id="dep-note" type="text" placeholder="Note (optional, e.g. bank ref)" />
+          <button class="primary" id="dep-request-btn">Request Deposit</button>
+        </div>
+        <div class="meta" style="font-size:12px;color:var(--text-dim);margin-top:6px">
+          Make your bank transfer first, then submit a request here. The admin will confirm the transfer arrived and credit your chips.
+        </div>
       </div>
       <div id="my-deposits-list" style="margin-top:10px"></div>
       `
@@ -123,6 +128,20 @@ export function renderDepositPanel(container, currentUser) {
       }
     });
     refreshMine().catch((e) => toast(e.message, "error"));
+
+    // Proactively hide the deposit form if not yet verified, rather than
+    // only erroring after the player tries to submit.
+    api
+      .kycMine()
+      .then(({ status }) => {
+        if (status !== "approved") {
+          const gate = container.querySelector("#dep-kyc-gate");
+          const form = container.querySelector("#dep-form-row");
+          if (gate) gate.style.display = "block";
+          if (form) form.style.display = "none";
+        }
+      })
+      .catch(() => {});
   }
 
   return () => {
