@@ -6,6 +6,7 @@ import { db } from "../db/database";
 import { forcedBetsForStakes, StakesLevel } from "./stakes";
 import { recordCashRake } from "../db/houseRevenue";
 import { CASH_RAKE_RATE, applyRate } from "../db/economy";
+import { signHandData } from "../db/handSigning";
 
 export interface Seat {
   index: number;
@@ -31,7 +32,7 @@ const closeBuyinStmt = db.prepare(
   `UPDATE table_buyins SET active = 0 WHERE user_id = ? AND table_id = ? AND active = 1`
 );
 const insertHandHistoryStmt = db.prepare(
-  `INSERT INTO hand_history (id, table_id, variant, started_at, ended_at, data) VALUES (?, ?, ?, ?, ?, ?)`
+  `INSERT INTO hand_history (id, table_id, variant, started_at, ended_at, data, hash, signature) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 );
 
 export interface TableOptions {
@@ -380,13 +381,21 @@ export class Table {
       if (totalRake > 0) recordCashRake(this.id, totalRake, `hand-${this.handStartedAt}`);
     }
     if (result) {
+      // Cryptographically sign the settled hand's result so it can be
+      // verified later -- by an auditor, or a player disputing a hand -- as
+      // exactly what the server produced at the time, unaltered since.
+      const handId = randomUUID();
+      const dataJson = JSON.stringify({ result, community: state.community });
+      const { hash, signature } = signHandData(dataJson);
       insertHandHistoryStmt.run(
-        randomUUID(),
+        handId,
         this.id,
         this.variant.id,
         this.handStartedAt,
         Date.now(),
-        JSON.stringify({ result, community: state.community })
+        dataJson,
+        hash,
+        signature
       );
     }
   }
