@@ -82,17 +82,27 @@ product. Specifically:
   withdrawals directly credit/debit the ledger; hook up a real processor and
   identity verification before real money is involved.
 - **RNG**: shuffling uses Node's `crypto.randomInt` (CSPRNG), which is sound,
-  but a licensed room would also want a certified/audited shuffle and
-  server-side hand-history signing for dispute resolution.
+  but a licensed room would also want a certified/audited shuffle. Every
+  settled hand's result is now cryptographically signed server-side
+  (Ed25519, see `server/src/db/handSigning.ts`) so it can be independently
+  verified after the fact via `GET /api/hands/:id/verify` and
+  `GET /api/verify/publickey` -- dispute resolution is covered, an
+  audited/certified shuffle process is still a separate step (see the RNG
+  audit note below).
 - **Anti-collusion / anti-multi-accounting**: not implemented.
-- **Known simplifications** in the engine (all documented in code comments):
-  stud/razz "who acts first" and bring-in ties use a simplified board
-  comparison rather than full suit-ranking edge cases; fixed-limit raise cap
-  is a flat 4 raises/street; table seat caps follow real casino conventions
-  for the same reason casinos use them (a single 52-card shoe can only deal
-  so many hands' worth of cards), except draw games, which recycle
-  folded/discarded cards back into the shoe when it runs low (the standard
-  poker-room rule for exactly this situation).
+- **Engine simplifications, resolved**: stud/razz "who acts first" and
+  bring-in ties now use full suit-ranking tiebreaks (Robert's Rules of
+  Poker convention: clubs < diamonds < hearts < spades) whenever two or
+  more players' up-cards are an exact rank-for-rank tie, not just a
+  grouped-rank comparison (see `packages/engine/src/exposed.ts`);
+  fixed-limit's raise cap now correctly lifts once only two players remain
+  contesting a pot (heads-up fixed-limit is uncapped, per standard casino
+  rules), rather than always being a flat 4 raises/street (see
+  `packages/engine/src/betting.ts`). Table seat caps still follow real
+  casino conventions for the same reason casinos use them (a single
+  52-card shoe can only deal so many hands' worth of cards), except draw
+  games, which recycle folded/discarded cards back into the shoe when it
+  runs low (the standard poker-room rule for exactly this situation).
 - **Scaling**: one Node process, in-memory tables, SQLite on disk. Fine for
   a demo or a single-node deployment; horizontal scaling would need the
   table state moved to a shared store (Redis, etc.) and sessions to be
