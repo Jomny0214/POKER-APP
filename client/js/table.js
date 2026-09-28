@@ -26,6 +26,8 @@ function seatPosition(index, maxSeats) {
 export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
   const tournamentId = opts.tournamentId ?? null;
 
+  document.body.classList.add("compact-header");
+
   root.innerHTML = `
     <div class="table-view-wrap">
       <div class="table-topbar">
@@ -466,5 +468,6 @@ export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
     unsubscribe();
     stopTourneyPoll();
     clearCommunityTimers();
+    document.body.classList.remove("compact-header");
   };
 }
