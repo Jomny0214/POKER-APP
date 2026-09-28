@@ -1,6 +1,7 @@
 import { Router, sendJson, readJsonBody, Ctx } from "./router";
 import { register, login, createSession, destroySession, publicUser, resolveSession, isAdmin } from "../auth";
 import { getBalance, credit, debit, ledgerHistory, InsufficientFundsError } from "../db/wallet";
+import { totalHouseRevenue, houseRevenueHistory } from "../db/houseRevenue";
 import { tableManager } from "../table/TableManager";
 import { UserExistsError, findByUsername, listAll } from "../db/users";
 import {
@@ -106,6 +107,20 @@ router.get("/api/admin/players", async (ctx) => {
   }
   const players = listAll().map((u) => ({ username: u.username, balance: getBalance(u.id) }));
   sendJson(ctx.res, 200, { players });
+});
+
+// Admin-only: the house's running take from cash-game rake and tournament
+// registration fees, plus a recent activity feed for auditing.
+router.get("/api/admin/house-revenue", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  const totals = totalHouseRevenue();
+  const recent = houseRevenueHistory(100);
+  sendJson(ctx.res, 200, { totals, recent });
 });
 
 router.post("/api/admin/credit", async (ctx) => {
