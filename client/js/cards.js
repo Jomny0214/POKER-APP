@@ -1,4 +1,8 @@
 const SUIT_SYMBOL = { c: "♣", d: "♦", h: "♥", s: "♠" };
+// The engine encodes ten as "T" (single char, same as every other rank) --
+// that's what's hashed/signed and stored, so it stays "T" everywhere under
+// the hood. This is purely a display swap for however a card is rendered.
+const RANK_DISPLAY = { T: "10" };
 
 export function cardEl(code, extraClass = "") {
   const div = document.createElement("div");
@@ -7,7 +11,8 @@ export function cardEl(code, extraClass = "") {
     div.innerHTML = `<div class="card-back-pattern"></div>`;
     return div;
   }
-  const rank = code.slice(0, -1);
+  const rawRank = code.slice(0, -1);
+  const rank = RANK_DISPLAY[rawRank] ?? rawRank;
   const suit = code.slice(-1);
   const isRed = suit === "h" || suit === "d";
   const symbol = SUIT_SYMBOL[suit] ?? suit;
