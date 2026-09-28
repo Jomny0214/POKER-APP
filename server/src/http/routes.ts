@@ -3,6 +3,7 @@ import { register, login, createSession, destroySession, publicUser, resolveSess
 import { getBalance, credit, debit, ledgerHistory, InsufficientFundsError } from "../db/wallet";
 import { totalHouseRevenue, houseRevenueHistory } from "../db/houseRevenue";
 import { getPublicKeyPem, verifyHandSignature } from "../db/handSigning";
+import { recordLoginFingerprint, getClientIp, listCollusionFlags, resolveCollusionFlag } from "../db/collusion";
 import { db } from "../db/database";
 import { tableManager } from "../table/TableManager";
 import { UserExistsError, findByUsername, listAll } from "../db/users";
@@ -40,6 +41,7 @@ router.post("/api/auth/register", async (ctx) => {
   try {
     const user = register(body.email ?? "", body.username ?? "", body.password ?? "");
     const token = createSession(user.id);
+    recordLoginFingerprint(user.id, getClientIp(ctx.req), ctx.req.headers["user-agent"] ?? "");
     sendJson(ctx.res, 201, { user: publicUser(user), token, balance: getBalance(user.id) });
   } catch (err) {
     const status = err instanceof UserExistsError ? 409 : 400;
@@ -52,6 +54,7 @@ router.post("/api/auth/login", async (ctx) => {
   try {
     const user = login(body.email ?? "", body.password ?? "");
     const token = createSession(user.id);
+    recordLoginFingerprint(user.id, getClientIp(ctx.req), ctx.req.headers["user-agent"] ?? "");
     sendJson(ctx.res, 200, { user: publicUser(user), token, balance: getBalance(user.id) });
   } catch (err) {
     sendJson(ctx.res, 401, { error: (err as Error).message });
@@ -159,6 +162,35 @@ router.get("/api/hands/:id/verify", async (ctx) => {
     signature: row.signature,
     valid,
   });
+});
+
+// Admin-only: anti-collusion / anti-multi-accounting flags (shared-IP
+// seating, one-directional chip-dumping between two accounts). These are
+// signals for human review, not automated enforcement -- see db/collusion.ts.
+router.get("/api/admin/collusion-flags", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  sendJson(ctx.res, 200, { flags: listCollusionFlags(100) });
+});
+
+router.post("/api/admin/collusion-flags/:id/resolve", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  const id = Number(ctx.params.id);
+  if (!Number.isFinite(id)) {
+    sendJson(ctx.res, 400, { error: "Invalid flag id" });
+    return;
+  }
+  resolveCollusionFlag(id);
+  sendJson(ctx.res, 200, { ok: true });
 });
 
 router.post("/api/admin/credit", async (ctx) => {
