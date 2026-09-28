@@ -2,6 +2,8 @@ import { Router, sendJson, readJsonBody, Ctx } from "./router";
 import { register, login, createSession, destroySession, publicUser, resolveSession, isAdmin } from "../auth";
 import { getBalance, credit, debit, ledgerHistory, InsufficientFundsError } from "../db/wallet";
 import { totalHouseRevenue, houseRevenueHistory } from "../db/houseRevenue";
+import { getPublicKeyPem, verifyHandSignature } from "../db/handSigning";
+import { db } from "../db/database";
 import { tableManager } from "../table/TableManager";
 import { UserExistsError, findByUsername, listAll } from "../db/users";
 import {
@@ -121,6 +123,42 @@ router.get("/api/admin/house-revenue", async (ctx) => {
   const totals = totalHouseRevenue();
   const recent = houseRevenueHistory(100);
   sendJson(ctx.res, 200, { totals, recent });
+});
+
+// Public: the server's Ed25519 public signing key, so anyone -- a player,
+// an independent auditor -- can verify a hand's signature themselves
+// without having to trust this server's own /verify endpoint below.
+router.get("/api/verify/publickey", async (ctx) => {
+  sendJson(ctx.res, 200, { algorithm: "ed25519", publicKey: getPublicKeyPem() });
+});
+
+// Public: re-hashes a stored hand record and checks it against its stored
+// signature. A mismatch means the row was altered after the hand settled.
+router.get("/api/hands/:id/verify", async (ctx) => {
+  const row = db
+    .prepare(`SELECT id, table_id, variant, started_at, ended_at, data, hash, signature FROM hand_history WHERE id = ?`)
+    .get(ctx.params.id) as
+    | { id: string; table_id: string; variant: string; started_at: number; ended_at: number; data: string; hash: string | null; signature: string | null }
+    | undefined;
+  if (!row) {
+    sendJson(ctx.res, 404, { error: "Hand not found" });
+    return;
+  }
+  if (!row.hash || !row.signature) {
+    sendJson(ctx.res, 200, { handId: row.id, valid: false, reason: "unsigned" });
+    return;
+  }
+  const valid = verifyHandSignature(row.data, row.hash, row.signature);
+  sendJson(ctx.res, 200, {
+    handId: row.id,
+    tableId: row.table_id,
+    variant: row.variant,
+    startedAt: row.started_at,
+    endedAt: row.ended_at,
+    hash: row.hash,
+    signature: row.signature,
+    valid,
+  });
 });
 
 router.post("/api/admin/credit", async (ctx) => {
