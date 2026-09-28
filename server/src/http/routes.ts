@@ -3,6 +3,7 @@ import { register, login, createSession, destroySession, publicUser, resolveSess
 import { getBalance, credit, debit, ledgerHistory, InsufficientFundsError } from "../db/wallet";
 import { totalHouseRevenue, houseRevenueHistory } from "../db/houseRevenue";
 import { getPublicKeyPem, verifyHandSignature } from "../db/handSigning";
+import { listRecentHands, getHandDetail } from "../db/handHistoryView";
 import { recordLoginFingerprint, getClientIp, listCollusionFlags, resolveCollusionFlag } from "../db/collusion";
 import { db } from "../db/database";
 import { tableManager } from "../table/TableManager";
@@ -163,6 +164,40 @@ router.get("/api/hands/:id/verify", async (ctx) => {
     signature: row.signature,
     valid,
   });
+});
+
+// Admin-only: recent settled hands across all tables (or one table via
+// ?tableId=), summarized for the Hand History panel -- board, pot total,
+// winners, and whether the hand is cryptographically signed. See
+// GET /api/admin/hand-history/:id for the full per-hand detail, and
+// GET /api/hands/:id/verify (above) to independently check a signature.
+router.get("/api/admin/hand-history", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  const limit = Number(ctx.query.get("limit")) || 50;
+  const tableId = ctx.query.get("tableId") ?? undefined;
+  sendJson(ctx.res, 200, { hands: listRecentHands(limit, tableId) });
+});
+
+// Admin-only: full detail for one hand -- board, per-pot winners, and
+// revealed showdown hands (empty if the hand ended uncontested).
+router.get("/api/admin/hand-history/:id", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  const detail = getHandDetail(ctx.params.id);
+  if (!detail) {
+    sendJson(ctx.res, 404, { error: "Hand not found" });
+    return;
+  }
+  sendJson(ctx.res, 200, { hand: detail });
 });
 
 // Admin-only: anti-collusion / anti-multi-accounting flags (shared-IP
