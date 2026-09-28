@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Apex Poker — Built for real poker</title>
+  <meta name="description" content="Apex Poker. Built for real poker. The only platform engineered with absolute randomness for true card play." />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#0f1720" />
+  <link rel="icon" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-180.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Apex Poker" />
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    #app-header .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #app-header .brand-logo {
+      width: 34px;
+      height: 34px;
+      border-radius: 6px;
+      object-fit: cover;
+      flex-shrink: 0;
+    }
+    #app-header .brand-text {
+      display: flex;
+      flex-direction: column;
+      line-height: 1.15;
+    }
+    #app-header .brand-name {
+      font-weight: 700;
+      font-size: 16px;
+    }
+    #app-header .brand-tagline {
+      font-size: 10px;
+      color: var(--text-dim, #9aa5b1);
+      font-weight: 400;
+    }
+    .tagline-banner {
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-dim, #9aa5b1);
+      padding: 6px 12px;
+      background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+  </style>
+</head>
+<body>
+  <header id="app-header">
+    <div class="brand">
+      <img src="/icons/icon-192.png" class="brand-logo" alt="Apex Poker logo" />
+      <div class="brand-text">
+        <span class="brand-name">Apex Poker</span>
+        <span class="brand-tagline">Built for real poker.</span>
+      </div>
+    </div>
+    <div id="header-right" class="header-right"></div>
+  </header>
+  <div class="tagline-banner">The only platform engineered with absolute randomness for true card play.</div>
+  <div id="terms-row" style="text-align:center;font-size:11px;padding:4px 0 8px"><a href="/terms.html" style="color:#e0a72d">Terms & Rules</a></div>
+  <main id="app-root"></main>
+  <div id="toast-container"></div>
+  <script>
+    window.addEventListener("error", (e) => {
+      const el = document.getElementById("app-root");
+      if (el && !el.dataset.hadError) {
+        el.dataset.hadError = "1";
+        el.innerHTML = "<pre style='color:#e74c3c;padding:16px;white-space:pre-wrap'>" +
+          (e.error && e.error.stack ? e.error.stack : e.message) + "</pre>";
+      }
+    });
+  </script>
+  <script type="module" src="/js/app.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
