@@ -7,6 +7,7 @@ import { forcedBetsForStakes, StakesLevel } from "./stakes";
 import { recordCashRake } from "../db/houseRevenue";
 import { CASH_RAKE_RATE, applyRate } from "../db/economy";
 import { signHandData } from "../db/handSigning";
+import { recordHandTransfers, checkSharedIpSeating } from "../db/collusion";
 
 export interface Seat {
   index: number;
@@ -397,6 +398,13 @@ export class Table {
         hash,
         signature
       );
+
+      // Anti-collusion / anti-multi-accounting heuristics: cheap to run once
+      // per settled hand, flags surface for admin review only (see
+      // db/collusion.ts) -- nothing here ever blocks or reverses play.
+      recordHandTransfers(this.id, handId, result.netStackChange);
+      const seatedUserIds = this.seats.filter((s): s is Seat => s !== null).map((s) => s.userId);
+      checkSharedIpSeating(this.id, seatedUserIds);
     }
   }
 
