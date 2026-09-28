@@ -112,8 +112,11 @@ export function listRecentHands(limit = 50, tableId?: string): HandSummary[] {
   const cap = Math.min(Math.max(1, Math.floor(limit) || 50), 200);
   const rows = (
     tableId
-      ? db.prepare(`SELECT * FROM hand_history WHERE table_id = ? ORDER BY id DESC LIMIT ?`).all(tableId, cap)
-      : db.prepare(`SELECT * FROM hand_history ORDER BY id DESC LIMIT ?`).all(cap)
+      // hand_history.id is a random UUID (see Table.settleHand()), not an
+      // autoincrement integer -- ordering by it sorts alphabetically, not
+      // chronologically. Sort by the actual timestamp instead.
+      ? db.prepare(`SELECT * FROM hand_history WHERE table_id = ? ORDER BY started_at DESC LIMIT ?`).all(tableId, cap)
+      : db.prepare(`SELECT * FROM hand_history ORDER BY started_at DESC LIMIT ?`).all(cap)
   ) as unknown as HandHistoryRow[];
 
   const allIds = rows.flatMap((r) => collectPlayerIds(JSON.parse(r.data)));
