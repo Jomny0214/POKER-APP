@@ -170,3 +170,16 @@ export function rejectKyc(id: number, resolvedBy: string, reason: string): KycSu
   resolveStmt.run("rejected", Date.now(), resolvedBy, (reason ?? "").trim().slice(0, 500) || null, id);
   return getByIdStmt.get(id) as unknown as KycSubmissionRow;
 }
+
+const scrubStmt = db.prepare(
+  `UPDATE kyc_submissions SET full_name = '[deleted]', date_of_birth = '[deleted]', address = '[deleted]',
+    id_number = '[deleted]', id_image_data = '' WHERE user_id = ?`
+);
+
+/** Called from account deletion: the identity document itself (name, DOB,
+ * address, ID number, ID photo) has no reason to keep existing once the
+ * account behind it is gone, even though the submission ROW stays (status +
+ * timestamps) for admin audit history of what was reviewed and when. */
+export function scrubKycForUser(userId: string): void {
+  scrubStmt.run(userId);
+}
