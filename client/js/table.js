@@ -195,7 +195,7 @@ export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
     root.querySelector("#table-title").textContent = `${state.variantName} — ${state.stakes.label}`;
 
     const felt = root.querySelector("#felt");
-    felt.querySelectorAll(".seat, .seat-empty").forEach((el) => el.remove());
+    felt.querySelectorAll(".seat, .seat-empty, .bet-chip").forEach((el) => el.remove());
 
     const handPlayers = new Map((state.hand?.players ?? []).map((p) => [p.id, p]));
 
@@ -235,6 +235,7 @@ export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
 
       const isMe = seatData.userId === currentUser.id;
       const isButton = state.buttonSeatIndex === i;
+      if (isMe) div.className += " seat-mine";
 
       const box = document.createElement("div");
       box.className = "seat-box";
@@ -242,9 +243,23 @@ export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
         ${isButton ? `<div class="dealer-btn">D</div>` : ""}
         <div class="name">${seatData.username}${isMe ? " (you)" : ""}${seatData.sittingOut ? " · sitting out" : ""}</div>
         <div class="stack">${seatData.stack} chips</div>
-        ${hp && hp.committed ? `<div class="committed">bet ${hp.committed}</div>` : ""}
       `;
       div.appendChild(box);
+
+      // Show committed chips as a small chip marker pulled forward toward
+      // the pot, instead of a text label inside the seat box.
+      if (hp && hp.committed) {
+        const seatX = parseFloat(pos.left);
+        const seatY = parseFloat(pos.top);
+        const betX = seatX + (50 - seatX) * 0.32;
+        const betY = seatY + (50 - seatY) * 0.32;
+        const betChip = document.createElement("div");
+        betChip.className = "bet-chip";
+        betChip.style.left = `${betX}%`;
+        betChip.style.top = `${betY}%`;
+        betChip.textContent = hp.committed;
+        felt.appendChild(betChip);
+      }
 
       // hole cards
       if (hp) {
@@ -253,7 +268,7 @@ export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
         let codes = [];
         if (hp.revealedHoleCards) {
           codes = hp.revealedHoleCards;
-        } else if (state.variantId !== "seven_stud" && state.variantId !== "seven_stud_hilo" && state.variantId !== "razz") {
+        } else if (isMe && state.variantId !== "seven_stud" && state.variantId !== "seven_stud_hilo" && state.variantId !== "razz") {
           codes = Array(hp.holeCardCount).fill("??");
         }
         if (codes.length) {
@@ -314,138 +329,4 @@ export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
     const lines = [];
     for (const pot of state.hand.result.pots) {
       for (const w of pot.winners) {
-        lines.push(`<div class="winner-line">${nameFor(w.playerId)} wins ${w.amount} (${w.side}${w.hand ? " – " + w.hand : ""})</div>`);
-      }
-    }
-    el.innerHTML = `<div class="showdown-banner">${lines.join("")}</div>`;
-  }
-
-  function renderDrawPicker(state) {
-    const el = root.querySelector("#draw-picker");
-    const isDrawPhase = typeof state.hand?.phase === "string" && state.hand.phase.startsWith("draw");
-    const myTurn = isDrawPhase && state.hand.currentActor === currentUser.id;
-    if (!myTurn) {
-      el.innerHTML = "";
-      selectedDiscards = new Set();
-      return;
-    }
-    const me = (state.hand.players ?? []).find((p) => p.id === currentUser.id);
-    const codes = me?.revealedHoleCards ?? [];
-    el.innerHTML = `<div class="draw-picker"><strong>Choose cards to discard (click to toggle), then draw:</strong><div class="cards-row" id="draw-cards"></div><button class="primary" id="draw-submit">Draw</button> <button id="draw-standpat">Stand Pat</button></div>`;
-    const cardsRow = el.querySelector("#draw-cards");
-    codes.forEach((code, i) => {
-      const wrap = document.createElement("div");
-      wrap.className = "card-pick" + (selectedDiscards.has(i) ? " selected" : "");
-      wrap.innerHTML = `<div class="discard-label">${selectedDiscards.has(i) ? "DISCARD" : ""}</div>`;
-      wrap.appendChild(cardEl(code));
-      wrap.addEventListener("click", () => {
-        if (selectedDiscards.has(i)) selectedDiscards.delete(i);
-        else selectedDiscards.add(i);
-        renderDrawPicker(state);
-      });
-      cardsRow.appendChild(wrap);
-    });
-    el.querySelector("#draw-submit").addEventListener("click", () => {
-      gameSocket.send({ type: "draw", tableId, discardIndices: [...selectedDiscards] });
-      selectedDiscards = new Set();
-    });
-    el.querySelector("#draw-standpat").addEventListener("click", () => {
-      gameSocket.send({ type: "draw", tableId, discardIndices: [] });
-      selectedDiscards = new Set();
-    });
-  }
-
-  function renderActionBar(state) {
-    const bar = root.querySelector("#action-bar");
-    const myTurn = state.hand && state.hand.currentActor === currentUser.id && state.hand.legalActions;
-    if (!myTurn) {
-      bar.style.display = "none";
-      bar.innerHTML = "";
-      return;
-    }
-    bar.style.display = "flex";
-    const legal = state.hand.legalActions;
-    bar.innerHTML = "";
-
-    const foldBtn = document.createElement("button");
-    foldBtn.className = "danger";
-    foldBtn.textContent = "Fold";
-    foldBtn.addEventListener("click", () => gameSocket.send({ type: "action", tableId, action: { type: "fold" } }));
-    bar.appendChild(foldBtn);
-
-    const checkCallBtn = document.createElement("button");
-    checkCallBtn.className = "primary";
-    checkCallBtn.textContent = legal.canCheck ? "Check" : `Call ${legal.callAmount}`;
-    checkCallBtn.addEventListener("click", () =>
-      gameSocket.send({ type: "action", tableId, action: { type: legal.canCheck ? "check" : "call" } })
-    );
-    bar.appendChild(checkCallBtn);
-
-    if (legal.canBetOrRaise) {
-      const spacer = document.createElement("div");
-      spacer.className = "spacer";
-      bar.appendChild(spacer);
-
-      const slider = document.createElement("div");
-      slider.className = "bet-slider";
-      const isFixed = legal.minTo === legal.maxTo;
-      slider.innerHTML = `
-        <span>${legal.canCall || !legal.canCheck ? "Raise to" : "Bet"}</span>
-        ${isFixed ? "" : `<input type="range" min="${legal.minTo}" max="${legal.maxTo}" value="${legal.minTo}" id="bet-range" />`}
-        <input type="number" min="${legal.minTo}" max="${legal.maxTo}" value="${legal.minTo}" id="bet-amount" ${isFixed ? "readonly" : ""} />
-      `;
-      bar.appendChild(slider);
-      const range = slider.querySelector("#bet-range");
-      const amount = slider.querySelector("#bet-amount");
-      if (range) {
-        range.addEventListener("input", () => (amount.value = range.value));
-        amount.addEventListener("input", () => (range.value = amount.value));
-      }
-
-      const betBtn = document.createElement("button");
-      betBtn.className = "gold";
-      betBtn.textContent = legal.canCall || !legal.canCheck ? "Raise" : "Bet";
-      betBtn.addEventListener("click", () => {
-        const to = Math.max(legal.minTo, Math.min(legal.maxTo, Number(amount.value)));
-        gameSocket.send({
-          type: "action",
-          tableId,
-          action: { type: legal.canCheck ? "bet" : "raise", to },
-        });
-      });
-      bar.appendChild(betBtn);
-
-      const allInBtn = document.createElement("button");
-      allInBtn.textContent = "All-In";
-      allInBtn.addEventListener("click", () =>
-        gameSocket.send({ type: "action", tableId, action: { type: legal.canCheck ? "bet" : "raise", to: legal.maxTo } })
-      );
-      bar.appendChild(allInBtn);
-    }
-  }
-
-  async function promptSit(state, seatIndex) {
-    const amountStr = prompt(`Buy in for how many chips? (${state.stakes.minBuyIn} - ${state.stakes.maxBuyIn})`, String(state.stakes.minBuyIn));
-    if (!amountStr) return;
-    const amount = Number(amountStr);
-    if (!Number.isFinite(amount)) return;
-    try {
-      const bal = await api.balance();
-      if (bal.balance < amount) {
-        toast("Insufficient balance. Deposit chips from the lobby wallet panel first.", "error");
-        return;
-      }
-      gameSocket.send({ type: "sit", tableId, seatIndex, buyIn: amount });
-    } catch (err) {
-      toast(err.message, "error");
-    }
-  }
-
-  if (lastState) render(lastState);
-
-  return () => {
-    unsubscribe();
-    stopTourneyPoll();
-    clearCommunityTimers();
-  };
-}
+        lines.push(`<div class="winner-line">${nameFor(w.playerId)} wins ${w.amount} (${
