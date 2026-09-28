@@ -5,12 +5,16 @@ import { renderDepositPanel } from "./deposits.js";
 import { renderPlayerLog } from "./playerlog.js";
 import { renderHouseRevenue } from "./houserevenue.js";
 import { renderCollusionPanel } from "./collusion.js";
+import { renderKycPanel } from "./kyc.js";
+import { renderKycAdminPanel } from "./kycadmin.js";
 import { renderChatPanel } from "./chat.js";
 
 export async function renderLobby(root, navigate, onBalanceChange, currentUser) {
   root.innerHTML = `
     <div id="wallet-panel-mount"></div>
+    <div id="kyc-panel-mount"></div>
     <div id="deposit-panel-mount"></div>
+    <div id="kyc-admin-mount"></div>
     <div id="player-log-mount"></div>
     <div id="house-revenue-mount"></div>
     <div id="collusion-panel-mount"></div>
@@ -29,7 +33,9 @@ export async function renderLobby(root, navigate, onBalanceChange, currentUser) 
   root.querySelector("#nav-tourneys").addEventListener("click", () => navigate("tournaments"));
 
   renderWalletPanel(root.querySelector("#wallet-panel-mount"), onBalanceChange, currentUser);
+  renderKycPanel(root.querySelector("#kyc-panel-mount"), currentUser);
   renderDepositPanel(root.querySelector("#deposit-panel-mount"), currentUser);
+  renderKycAdminPanel(root.querySelector("#kyc-admin-mount"), currentUser);
   renderPlayerLog(root.querySelector("#player-log-mount"), currentUser);
   renderHouseRevenue(root.querySelector("#house-revenue-mount"), currentUser);
   renderCollusionPanel(root.querySelector("#collusion-panel-mount"), currentUser);

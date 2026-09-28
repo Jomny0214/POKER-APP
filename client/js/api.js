@@ -42,6 +42,12 @@ export const api = {
   adminHouseRevenue: () => request("/api/admin/house-revenue"),
   adminCollusionFlags: () => request("/api/admin/collusion-flags"),
   adminResolveCollusionFlag: (id) => request(`/api/admin/collusion-flags/${id}/resolve`, { method: "POST" }),
+  kycSubmit: (payload) => request("/api/kyc/submit", { method: "POST", body: JSON.stringify(payload) }),
+  kycMine: () => request("/api/kyc/mine"),
+  adminKycPending: () => request("/api/admin/kyc/pending"),
+  adminKycDetail: (id) => request(`/api/admin/kyc/${id}`),
+  adminKycApprove: (id) => request(`/api/admin/kyc/${id}/approve`, { method: "POST" }),
+  adminKycReject: (id, reason) => request(`/api/admin/kyc/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
   tables: () => request("/api/tables"),
 
   tournamentsMeta: () => request("/api/tournaments/meta"),
