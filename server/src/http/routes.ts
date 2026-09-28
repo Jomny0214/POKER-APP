@@ -109,38 +109,7 @@ router.get("/api/admin/players", async (ctx) => {
 });
 
 router.post("/api/admin/credit", async (ctx) => {
-  requireAuth(ctx);python3 - << 'PY'
-  path = "client/js/lobby.js"
-  with open(path) as f:
-      content = f.read()
-
-      if "player-log-mount" in content:
-          print("Already present, skipping.")
-          else:
-              import_anchor = 'import { renderDepositPanel } from "./deposits.js";'
-                  call_anchor = 'renderDepositPanel(root.querySelector("#deposit-panel-mount"), currentUser);'
-                      div_anchor = '<div id="deposit-panel-mount"></div>'
-
-                          if import_anchor not in content or call_anchor not in content or div_anchor not in content:
-                                  print("ANCHOR NOT FOUND -- stop and tell Claude, do not proceed further.")
-                                      else:
-                                              content = content.replace(
-                                                          import_anchor,
-                                                                      import_anchor + '\nimport { renderPlayerLog } from "./playerlog.js";'
-                                                                              )
-                                                                                      content = content.replace(
-                                                                                                  div_anchor,
-                                                                                                              div_anchor + '\n    <div id="player-log-mount"></div>'
-                                                                                                                      )
-                                                                                                                              content = content.replace(
-                                                                                                                                          call_anchor,
-                                                                                                                                                      call_anchor + '\n  renderPlayerLog(root.querySelector("#player-log-mount"), currentUser);'
-                                                                                                                                                              )
-                                                                                                                                                                      with open(path, "w") as f:
-                                                                                                                                                                                  f.write(content)
-                                                                                                                                                                                          print("lobby.js updated OK")
-                                                                                                                                                                                          PY
-                                                                                                                                                                                          
+  requireAuth(ctx);
   const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
   if (!requester || !isAdmin(requester)) {
     sendJson(ctx.res, 403, { error: "Admin only" });
@@ -310,30 +279,7 @@ router.post("/api/admin/chat/:userId/send", async (ctx) => {
   try {
     const msg = sendAdminMessage(ctx.params.userId, body.username ?? "Player", body.message ?? "");
     sendJson(ctx.res, 200, { message: msg });
-python3 - << 'PY'
-path = "client/js/api.js"
-with open(path) as f:
-    content = f.read()
-    
-    if "chatSend:" in content:
-        print("Already present, skipping.")
-        else:
-            addition = """
-              chatSend: (message) =>
-                  request("/api/chat/send", { method: "POST", body: JSON.stringify({ message }) }),
-                    chatMine: () => request("/api/chat/mine"),
-                      adminChatThreads: () => request("/api/admin/chat/threads"),
-                        adminChatThread: (userId) => request(`/api/admin/chat/${userId}`),
-                          adminChatSend: (userId, username, message) =>
-                              request(`/api/admin/chat/${userId}/send`, { method: "POST", body: JSON.stringify({ username, message }) }),
-                              """
-                                  idx = content.rindex("};")
-                                      content = content[:idx] + addition + content[idx:]
-                                          with open(path, "w") as f:
-                                                  f.write(content)
-                                                      print("api.js updated OK (chat methods added)")
-                                                      PY
-                                                        } catch (err) {
+  } catch (err) {
     sendJson(ctx.res, 400, { error: (err as Error).message });
   }
 });
