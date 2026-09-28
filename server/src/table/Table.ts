@@ -4,6 +4,8 @@ import { WSConnection } from "../ws/websocket";
 import { credit, debit, withTransaction } from "../db/wallet";
 import { db } from "../db/database";
 import { forcedBetsForStakes, StakesLevel } from "./stakes";
+import { recordCashRake } from "../db/houseRevenue";
+import { CASH_RAKE_RATE, applyRate } from "../db/economy";
 
 export interface Seat {
   index: number;
@@ -358,6 +360,24 @@ export class Table {
     for (const pv of state.players) {
       const seat = this.seatOf(pv.id);
       if (seat) seat.stack = pv.stack;
+    }
+    // Cash-game rake: taken out of each winner's share of each pot, after
+    // the engine's own (unraked) pot math has already been applied above.
+    // Tournament tables are exempt -- tournament chips have no standalone
+    // cash value, the house's cut there is the registration fee instead
+    // (see TournamentManager.register()).
+    if (result && !this.opts.tournamentMode) {
+      let totalRake = 0;
+      for (const pot of result.pots) {
+        for (const winner of pot.winners) {
+          const rake = applyRate(winner.amount, CASH_RAKE_RATE);
+          if (rake <= 0) continue;
+          const seat = this.seatOf(winner.playerId);
+          if (seat) seat.stack -= rake;
+          totalRake += rake;
+        }
+      }
+      if (totalRake > 0) recordCashRake(this.id, totalRake, `hand-${this.handStartedAt}`);
     }
     if (result) {
       insertHandHistoryStmt.run(
