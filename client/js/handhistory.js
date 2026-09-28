@@ -9,9 +9,18 @@ function fmtTime(ms) {
   return ms ? new Date(ms).toLocaleString() : "";
 }
 
+// The engine encodes ten as "Tx" (e.g. "Th") -- displayed here as "10h" to
+// match how the table itself shows it, without touching the stored/hashed data.
+function displayCard(code) {
+  if (!code || code.length < 2) return code;
+  const rank = code.slice(0, -1);
+  const suit = code.slice(-1);
+  return (rank === "T" ? "10" : rank) + suit;
+}
+
 function cardsLine(cards) {
   if (!cards || !cards.length) return "&mdash;";
-  return cards.map((c) => escapeHtml(c)).join(" ");
+  return cards.map((c) => escapeHtml(displayCard(c))).join(" ");
 }
 
 export function renderHandHistoryPanel(container, currentUser) {
