@@ -14,6 +14,7 @@ import {
   approveDepositRequest,
   rejectDepositRequest,
 } from "../db/deposits";
+import { submitKyc, getMyLatestKyc, listPendingKyc, getKycDetail, approveKyc, rejectKyc, KycError } from "../db/kyc";
 import {
   sendPlayerMessage,
   sendAdminMessage,
@@ -264,6 +265,139 @@ router.get("/api/deposits/mine", async (ctx) => {
   sendJson(ctx.res, 200, { requests: listMyDepositRequests(userId) });
 });
 
+// Simple in-house identity verification -- a player submits their details
+// and an ID photo; an admin reviews and approves/rejects by eye (see
+// db/kyc.ts). Not a third-party KYC/AML vendor integration, by design.
+router.post("/api/kyc/submit", async (ctx) => {
+  const userId = requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  const body = ctx.body as {
+    fullName?: string;
+    dateOfBirth?: string;
+    address?: string;
+    idType?: string;
+    idNumber?: string;
+    idImageData?: string;
+  };
+  try {
+    const submission = submitKyc(userId, requester?.username ?? "", {
+      fullName: body.fullName ?? "",
+      dateOfBirth: body.dateOfBirth ?? "",
+      address: body.address ?? "",
+      idType: body.idType ?? "",
+      idNumber: body.idNumber ?? "",
+      idImageData: body.idImageData ?? "",
+    });
+    sendJson(ctx.res, 201, {
+      submission: { id: submission.id, status: submission.status, submittedAt: submission.submitted_at },
+    });
+  } catch (err) {
+    const status = err instanceof KycError ? 400 : 500;
+    sendJson(ctx.res, status, { error: (err as Error).message });
+  }
+});
+
+// Player's own latest verification status (and their submitted details, so
+// they can see what they sent and why it might have been rejected).
+router.get("/api/kyc/mine", async (ctx) => {
+  const userId = requireAuth(ctx);
+  const submission = getMyLatestKyc(userId);
+  if (!submission) {
+    sendJson(ctx.res, 200, { status: "unverified", submission: null });
+    return;
+  }
+  sendJson(ctx.res, 200, {
+    status: submission.status,
+    submission: {
+      id: submission.id,
+      fullName: submission.full_name,
+      dateOfBirth: submission.date_of_birth,
+      address: submission.address,
+      idType: submission.id_type,
+      idNumber: submission.id_number,
+      idImageData: submission.id_image_data,
+      submittedAt: submission.submitted_at,
+      resolvedAt: submission.resolved_at,
+      rejectionReason: submission.rejection_reason,
+    },
+  });
+});
+
+// Admin-only: the review queue -- pending submissions, without the (large)
+// image payload. See /api/admin/kyc/:id for the full detail + photo.
+router.get("/api/admin/kyc/pending", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  sendJson(ctx.res, 200, { pending: listPendingKyc() });
+});
+
+// Admin-only: full detail for one submission, including the ID photo.
+router.get("/api/admin/kyc/:id", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  const id = Number(ctx.params.id);
+  const submission = Number.isFinite(id) ? getKycDetail(id) : null;
+  if (!submission) {
+    sendJson(ctx.res, 404, { error: "Submission not found" });
+    return;
+  }
+  sendJson(ctx.res, 200, {
+    submission: {
+      id: submission.id,
+      username: submission.username,
+      fullName: submission.full_name,
+      dateOfBirth: submission.date_of_birth,
+      address: submission.address,
+      idType: submission.id_type,
+      idNumber: submission.id_number,
+      idImageData: submission.id_image_data,
+      status: submission.status,
+      submittedAt: submission.submitted_at,
+    },
+  });
+});
+
+router.post("/api/admin/kyc/:id/approve", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  const id = Number(ctx.params.id);
+  try {
+    const submission = approveKyc(id, requester.id);
+    sendJson(ctx.res, 200, { status: submission.status });
+  } catch (err) {
+    sendJson(ctx.res, 400, { error: (err as Error).message });
+  }
+});
+
+router.post("/api/admin/kyc/:id/reject", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  const id = Number(ctx.params.id);
+  const body = ctx.body as { reason?: string };
+  try {
+    const submission = rejectKyc(id, requester.id, body.reason ?? "");
+    sendJson(ctx.res, 200, { status: submission.status });
+  } catch (err) {
+    sendJson(ctx.res, 400, { error: (err as Error).message });
+  }
+});
+
 // Admin-only: every currently pending deposit request, across all players.
 router.get("/api/admin/deposits/pending", async (ctx) => {
   requireAuth(ctx);
@@ -382,8 +516,11 @@ export async function handleApi(ctx: Ctx): Promise<boolean> {
   ctx.userId = token ? resolveSession(token)?.id ?? null : null;
 
   if (ctx.req.method === "POST" || ctx.req.method === "PUT") {
+    // KYC submissions carry a base64-encoded ID photo, which blows well past
+    // the default 1MB body cap -- everything else stays at the tight default.
+    const maxBytes = url.pathname === "/api/kyc/submit" ? 7_000_000 : undefined;
     try {
-      ctx.body = await readJsonBody(ctx.req);
+      ctx.body = await readJsonBody(ctx.req, maxBytes);
     } catch (err) {
       sendJson(ctx.res, 400, { error: (err as Error).message });
       return true;
