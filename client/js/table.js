@@ -274,7 +274,11 @@ export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
         let codes = [];
         if (hp.revealedHoleCards) {
           codes = hp.revealedHoleCards;
-        } else if (isMe && state.variantId !== "seven_stud" && state.variantId !== "seven_stud_hilo" && state.variantId !== "razz") {
+        } else if (state.variantId !== "seven_stud" && state.variantId !== "seven_stud_hilo" && state.variantId !== "razz") {
+          // Not my cards and not revealed -- show face-down backs (opponents
+          // too, not just my own empty seats) so a live hand doesn't render
+          // as an empty slot. revealedHoleCards above is the ONLY source of
+          // real card values, so this never risks showing anyone's actual cards.
           codes = Array(hp.holeCardCount).fill("??");
         }
         if (codes.length) {
