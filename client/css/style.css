@@ -175,6 +175,8 @@ input, select {
   transform: translate(-50%, -50%);
   display: flex;
   gap: 6px;
+  z-index: 5;
+  pointer-events: none;
 }
 .pot-display {
   position: absolute;
@@ -250,8 +252,34 @@ input, select {
   position: absolute;
   transform: translate(-50%, -50%);
   width: 100px;
+  z-index: 1;
 }
 .seat-empty button { width: 100%; font-size: 12px; }
+
+/* ---------- Compact header (table view) ---------- */
+body.compact-header #app-header {
+  position: fixed;
+  top: auto;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  padding: 6px 10px;
+  border-top: 1px solid #24333f;
+  border-bottom: none;
+  justify-content: center;
+  gap: 10px;
+}
+body.compact-header #app-header .brand { display: none; }
+body.compact-header #app-header .header-right { font-size: 12px; gap: 8px; }
+body.compact-header #app-header .balance-chip { padding: 4px 10px; }
+body.compact-header .tagline-banner,
+body.compact-header #terms-row {
+  display: none;
+}
+body.compact-header #app-root {
+  padding-bottom: 44px;
+}
 
 .bet-chip {
   position: absolute;
