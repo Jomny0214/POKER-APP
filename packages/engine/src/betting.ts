@@ -74,9 +74,14 @@ export class BettingRound {
       maxTo = this.currentBet + potAfterCall;
       maxTo = Math.min(maxTo, p.committedStreet + p.stack);
     } else {
-      // fixed-limit: exactly one bet size, capped number of raises
+      // fixed-limit: exactly one bet size, capped number of raises -- except
+      // the cap lifts once only two players remain contesting the pot
+      // (everyone else has folded), per standard casino fixed-limit rules:
+      // heads-up betting is uncapped so two players can't be prevented from
+      // playing a hand all the way out.
       maxTo = minTo;
-      if (this.opts.maxRaisesFixedLimit !== undefined && this.raisesSoFar >= this.opts.maxRaisesFixedLimit) {
+      const capApplies = this.contendersRemaining() > 2;
+      if (capApplies && this.opts.maxRaisesFixedLimit !== undefined && this.raisesSoFar >= this.opts.maxRaisesFixedLimit) {
         maxTo = this.currentBet; // no more raising allowed
         minTo = this.currentBet;
       }
@@ -92,6 +97,13 @@ export class BettingRound {
     let sum = 0;
     for (const p of this.players.values()) sum += p.committedTotal;
     return sum;
+  }
+
+  /** How many players are still contesting the pot (not folded). Includes all-ins. */
+  private contendersRemaining(): number {
+    let n = 0;
+    for (const p of this.players.values()) if (!p.folded) n++;
+    return n;
   }
 
   apply(playerId: string, action: PlayerAction): void {
