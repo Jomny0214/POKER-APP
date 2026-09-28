@@ -199,8 +199,16 @@ export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
 
     const handPlayers = new Map((state.hand?.players ?? []).map((p) => [p.id, p]));
 
+    // Always rotate so the current player's own seat renders at the
+    // bottom-center slot (display index 0), regardless of their actual
+    // physical seat number. Works the same way for 6-max and 9-max tables
+    // since seatPosition() already spaces seats evenly around the ellipse
+    // for any maxSeats value.
+    const mySeat = state.yourSeat ?? 0;
+
     for (let i = 0; i < state.maxSeats; i++) {
-      const pos = seatPosition(i, state.maxSeats);
+      const displayIndex = (i - mySeat + state.maxSeats) % state.maxSeats;
+      const pos = seatPosition(displayIndex, state.maxSeats);
       const seatData = state.seats[i];
 
       if (!seatData) {
