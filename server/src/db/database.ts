@@ -168,3 +168,21 @@ CREATE TABLE IF NOT EXISTS chat_messages (
 `);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_chat_messages_user ON chat_messages(user_id, id);`);
 
+// House take: cash-game rake (per hand) and tournament registration fees
+// (per entry). This is money leaving the player economy entirely, so it is
+// deliberately kept separate from ledger_entries (which only ever moves
+// chips between a player and the table/tournament they're playing in).
+db.exec(`
+CREATE TABLE IF NOT EXISTS house_revenue (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  table_id TEXT,
+  tournament_id TEXT,
+  user_id TEXT REFERENCES users(id),
+  ref TEXT,
+  created_at INTEGER NOT NULL
+);
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_house_revenue_kind ON house_revenue(kind, id);`);
+
