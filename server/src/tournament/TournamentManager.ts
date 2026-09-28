@@ -7,6 +7,8 @@ import { tableManager } from "../table/TableManager";
 import { StakesLevel } from "../table/stakes";
 import { BlindLevel, BLIND_PRESETS, isValidCustomSchedule } from "./blindSchedules";
 import { computePayouts } from "./payouts";
+import { recordTournamentFee, reverseTournamentFee } from "../db/houseRevenue";
+import { TOURNAMENT_FEE_RATE, applyRate } from "../db/economy";
 
 // Only these two variants may ever be offered for a tournament, regardless
 // of what else the engine supports.
@@ -280,10 +282,18 @@ export class TournamentManager {
     if (t.scheduled_start_at <= Date.now()) throw new Error("Registration is closed for this tournament");
     if (this.entryFor(tournamentId, userId)) throw new Error("Already registered");
 
+    // The player pays the full stated buy-in; the house's registration fee
+    // comes out of that before the rest funds the prize pool (the buy-in
+    // number shown in the lobby doesn't change -- it's a "buy-in all-in"
+    // figure, not "buy-in + fee" on top).
+    const fee = applyRate(t.buyin, TOURNAMENT_FEE_RATE);
+    const prizeContribution = t.buyin - fee;
+
     withTransaction(() => {
       debit(userId, "tournament_buyin", t.buyin, `tournament-buyin-${tournamentId}`);
       insertEntryStmt.run(tournamentId, userId, username, Date.now());
-      updatePrizePoolStmt.run(t.buyin, tournamentId);
+      updatePrizePoolStmt.run(prizeContribution, tournamentId);
+      recordTournamentFee(tournamentId, userId, fee, `tournament-buyin-${tournamentId}`);
     });
     return this.get(tournamentId)!;
   }
@@ -295,10 +305,16 @@ export class TournamentManager {
     const entry = this.entryFor(tournamentId, userId);
     if (!entry || entry.status !== "registered") throw new Error("Not registered");
 
+    // Full refund, fee included -- the house only keeps its cut for
+    // tournaments that actually run.
+    const fee = applyRate(t.buyin, TOURNAMENT_FEE_RATE);
+    const prizeContribution = t.buyin - fee;
+
     withTransaction(() => {
       credit(userId, "tournament_cashout", t.buyin, `tournament-unregister-${tournamentId}`);
       deleteEntryStmt.run(tournamentId, userId);
-      updatePrizePoolStmt.run(-t.buyin, tournamentId);
+      updatePrizePoolStmt.run(-prizeContribution, tournamentId);
+      reverseTournamentFee(tournamentId, userId, fee, `tournament-unregister-${tournamentId}`);
     });
     return this.get(tournamentId)!;
   }
@@ -368,9 +384,11 @@ export class TournamentManager {
     if (registered.length < 2) {
       // Not enough players showed up: cancel and refund everyone rather than
       // leaving the tournament stuck forever.
+      const fee = applyRate(t.buyin, TOURNAMENT_FEE_RATE);
       withTransaction(() => {
         for (const e of registered) {
           credit(e.user_id, "tournament_cashout", t.buyin, `tournament-canceled-${tournamentId}`);
+          reverseTournamentFee(tournamentId, e.user_id, fee, `tournament-canceled-${tournamentId}`);
         }
         updateStatusStmt.run("canceled", tournamentId);
       });
