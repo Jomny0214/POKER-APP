@@ -48,6 +48,9 @@ export const api = {
   adminKycDetail: (id) => request(`/api/admin/kyc/${id}`),
   adminKycApprove: (id) => request(`/api/admin/kyc/${id}/approve`, { method: "POST" }),
   adminKycReject: (id, reason) => request(`/api/admin/kyc/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+  adminHandHistory: (limit) => request(`/api/admin/hand-history?limit=${limit || 50}`),
+  adminHandDetail: (id) => request(`/api/admin/hand-history/${id}`),
+  verifyHand: (id) => request(`/api/hands/${id}/verify`),
   tables: () => request("/api/tables"),
 
   tournamentsMeta: () => request("/api/tournaments/meta"),
