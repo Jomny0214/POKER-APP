@@ -15,7 +15,7 @@ import {
   approveDepositRequest,
   rejectDepositRequest,
 } from "../db/deposits";
-import { submitKyc, getMyLatestKyc, listPendingKyc, getKycDetail, approveKyc, rejectKyc, KycError } from "../db/kyc";
+import { submitKyc, getMyLatestKyc, listPendingKyc, getKycDetail, approveKyc, rejectKyc, getKycStatus, KycError } from "../db/kyc";
 import {
   sendPlayerMessage,
   sendAdminMessage,
@@ -285,6 +285,15 @@ router.get("/api/tables", async (ctx) => {
 router.post("/api/deposits/request", async (ctx) => {
   const userId = requireAuth(ctx);
   const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  // Real-money deposits require an approved identity verification first --
+  // playing itself (with whatever chips a player already has) stays open
+  // to everyone, this gate is specifically on real money moving in.
+  if (getKycStatus(userId) !== "approved") {
+    sendJson(ctx.res, 403, {
+      error: "Identity verification required before depositing. Submit your verification under Identity Verification, and try again once it's approved.",
+    });
+    return;
+  }
   const body = ctx.body as { amount?: number; note?: string };
   try {
     const request = createDepositRequest(userId, requester?.username ?? "", Number(body.amount), body.note);
