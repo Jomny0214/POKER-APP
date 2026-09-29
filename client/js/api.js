@@ -30,7 +30,11 @@ export const api = {
     request("/api/auth/register", { method: "POST", body: JSON.stringify({ email, username, password }) }),
   login: (email, password) =>
     request("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
-  logout: () => request("/api/auth/logout", { method: "POST" }),
+  logout: () => request("/api/auth/logout", { method: "POST" }),forgotPassword: (email) =>
+    request("/api/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+  resetPassword: (token, password) =>
+    request("/api/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) }),
+  deleteAccount: () => request("/api/account/delete", { method: "POST" }),
   me: () => request("/api/me"),
   balance: () => request("/api/wallet/balance"),
   history: () => request("/api/wallet/history"),
