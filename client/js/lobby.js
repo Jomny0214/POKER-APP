@@ -1,31 +1,15 @@
 import { api } from "./api.js";
 import { toast } from "./toast.js";
-import { renderWalletPanel } from "./wallet.js";
-import { renderDepositPanel } from "./deposits.js";
-import { renderPlayerLog } from "./playerlog.js";
-import { renderHouseRevenue } from "./houserevenue.js";
-import { renderCollusionPanel } from "./collusion.js";
-import { renderKycPanel } from "./kyc.js";
-import { renderKycAdminPanel } from "./kycadmin.js";
-import { renderHandHistoryPanel } from "./handhistory.js";
-import { renderChatPanel } from "./chat.js";
-import { renderAccountPanel } from "./account.js";
 
-export async function renderLobby(root, navigate, onBalanceChange, currentUser) {
+// Cash-tables tab only. Wallet/KYC/deposits/hand-history/chat/account live in
+// player.js's tab now, and tournaments have their own tab in tournamentLobby.js
+// -- see app.js's route() for how the three tabs map to hash routes.
+export async function renderLobby(root, navigate, currentUser) {
   root.innerHTML = `
-    <div id="wallet-panel-mount"></div>
-    <div id="kyc-panel-mount"></div>
-    <div id="deposit-panel-mount"></div>
-    <div id="kyc-admin-mount"></div>
-    <div id="player-log-mount"></div>
-    <div id="house-revenue-mount"></div>
-    <div id="hand-history-mount"></div>
-    <div id="collusion-panel-mount"></div>
-    <div id="chat-panel-mount"></div>
-    <div id="account-panel-mount"></div>
     <div class="nav-tabs">
       <button class="active" id="nav-cash">Cash Tables</button>
       <button id="nav-tourneys">Tournaments</button>
+      <button id="nav-player">Player</button>
     </div>
     <div class="lobby-toolbar">
       <h2 style="margin:0">Tables</h2>
@@ -35,17 +19,7 @@ export async function renderLobby(root, navigate, onBalanceChange, currentUser) 
   `;
 
   root.querySelector("#nav-tourneys").addEventListener("click", () => navigate("tournaments"));
-
-  renderWalletPanel(root.querySelector("#wallet-panel-mount"), onBalanceChange, currentUser);
-  renderKycPanel(root.querySelector("#kyc-panel-mount"), currentUser);
-  renderDepositPanel(root.querySelector("#deposit-panel-mount"), currentUser);
-  renderKycAdminPanel(root.querySelector("#kyc-admin-mount"), currentUser);
-  renderPlayerLog(root.querySelector("#player-log-mount"), currentUser);
-  renderHouseRevenue(root.querySelector("#house-revenue-mount"), currentUser);
-  renderHandHistoryPanel(root.querySelector("#hand-history-mount"), currentUser);
-  renderCollusionPanel(root.querySelector("#collusion-panel-mount"), currentUser);
-  renderChatPanel(root.querySelector("#chat-panel-mount"), currentUser);
-  renderAccountPanel(root.querySelector("#account-panel-mount"), currentUser, () => location.reload());
+  root.querySelector("#nav-player").addEventListener("click", () => navigate("player"));
 
   async function load() {
     const { tables } = await api.tables();
