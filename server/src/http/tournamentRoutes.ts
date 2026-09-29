@@ -165,6 +165,57 @@ router.post("/api/admin/tournaments", async (ctx) => {
   }
 });
 
+router.post("/api/admin/tournaments/:id/update", async (ctx) => {
+  requireAuth(ctx);
+  requireAdmin(ctx);
+  const body = ctx.body as {
+    name?: string;
+    variantId?: string;
+    tableSize?: number;
+    buyin?: number;
+    startingStack?: number;
+    rebuyAllowed?: boolean;
+    rebuyPrice?: number;
+    rebuyPeriodType?: "levels" | "minutes";
+    rebuyPeriodValue?: number;
+    maxTables?: number;
+    scheduledStartAt?: number;
+    blindPreset?: string;
+    customBlindSchedule?: unknown;
+  };
+  try {
+    const t = tournamentManager.update(ctx.params.id, {
+      name: body.name ?? "",
+      variantId: body.variantId ?? "",
+      tableSize: Number(body.tableSize),
+      buyin: Number(body.buyin),
+      startingStack: Number(body.startingStack),
+      rebuyAllowed: !!body.rebuyAllowed,
+      rebuyPrice: body.rebuyPrice !== undefined ? Number(body.rebuyPrice) : undefined,
+      rebuyPeriodType: body.rebuyPeriodType,
+      rebuyPeriodValue: body.rebuyPeriodValue !== undefined ? Number(body.rebuyPeriodValue) : undefined,
+      maxTables: Number(body.maxTables),
+      scheduledStartAt: Number(body.scheduledStartAt),
+      blindPreset: body.blindPreset,
+      customBlindSchedule: body.customBlindSchedule as any,
+    });
+    sendJson(ctx.res, 200, summarize(t));
+  } catch (err) {
+    sendJson(ctx.res, 400, { error: (err as Error).message });
+  }
+});
+
+router.post("/api/admin/tournaments/:id/delete", async (ctx) => {
+  requireAuth(ctx);
+  requireAdmin(ctx);
+  try {
+    tournamentManager.remove(ctx.params.id);
+    sendJson(ctx.res, 200, { ok: true });
+  } catch (err) {
+    sendJson(ctx.res, 400, { error: (err as Error).message });
+  }
+});
+
 router.post("/api/admin/tournaments/:id/force-end", async (ctx) => {
   requireAuth(ctx);
   requireAdmin(ctx);
