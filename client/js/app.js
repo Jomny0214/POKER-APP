@@ -1,5 +1,6 @@
 import { api, getToken, setToken } from "./api.js";
 import { renderAuth } from "./auth.js";
+import { renderResetPassword } from "./resetPassword.js";
 import { renderLobby } from "./lobby.js";
 import { renderTable } from "./table.js";
 import { renderTournamentLobby, renderTournamentDetail } from "./tournamentLobby.js";
@@ -80,6 +81,18 @@ async function route() {
 window.addEventListener("hashchange", () => route().catch((e) => toast(e.message, "error")));
 
 async function boot() {
+  const resetMatch = location.hash.match(/^#\/reset-password\/(.+)$/);
+  if (resetMatch) {
+    // Reachable from a "forgot password" email link regardless of whether
+    // this browser currently has a logged-in session, so this is checked
+    // before the token/auth branch below, not folded into route().
+    renderResetPassword(root, resetMatch[1], () => {
+      location.hash = "";
+      boot();
+    });
+    return;
+  }
+
   const token = getToken();
   if (!token) {
     renderAuth(root, async (user, balance) => {
