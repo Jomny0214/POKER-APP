@@ -1,5 +1,15 @@
 import { Router, sendJson, readJsonBody, Ctx } from "./router";
-import { register, login, createSession, destroySession, publicUser, resolveSession, isAdmin } from "../auth";
+import {
+  register,
+  login,
+  createSession,
+  destroySession,
+  destroyAllSessionsForUser,
+  publicUser,
+  resolveSession,
+  isAdmin,
+  hashPassword,
+} from "../auth";
 import { getBalance, credit, debit, ledgerHistory, InsufficientFundsError } from "../db/wallet";
 import { totalHouseRevenue, houseRevenueHistory } from "../db/houseRevenue";
 import { getPublicKeyPem, verifyHandSignature } from "../db/handSigning";
@@ -7,7 +17,10 @@ import { listRecentHands, getHandDetail } from "../db/handHistoryView";
 import { recordLoginFingerprint, getClientIp, listCollusionFlags, resolveCollusionFlag } from "../db/collusion";
 import { db } from "../db/database";
 import { tableManager } from "../table/TableManager";
-import { UserExistsError, findByUsername, listAll } from "../db/users";
+import { UserExistsError, findByUsername, findByEmail, listAll, updatePassword, anonymizeUser } from "../db/users";
+import { createResetToken, consumeResetToken } from "../db/passwordReset";
+import { sendEmail } from "../email";
+import { scrubKycForUser } from "../db/kyc";
 import {
   createDepositRequest,
   listMyDepositRequests,
@@ -67,6 +80,74 @@ router.post("/api/auth/logout", async (ctx) => {
   const auth = ctx.req.headers.authorization;
   const token = auth?.startsWith("Bearer ") ? auth.slice(7) : undefined;
   if (token) destroySession(token);
+  sendJson(ctx.res, 200, { ok: true });
+});
+
+// The public base URL this server is reachable at, used to build the link
+// inside a password-reset email. Set APP_URL on Railway if this ever moves
+// off the current domain.
+const APP_URL = process.env.APP_URL || "https://poker-server-production-be38.up.railway.app";
+
+router.post("/api/auth/forgot-password", async (ctx) => {
+  const body = ctx.body as { email?: string };
+  const email = (body.email ?? "").toLowerCase().trim();
+  // Always the same response whether or not the email is registered, so
+  // this endpoint can't be used to test which addresses have accounts.
+  const genericReply = { ok: true, message: "If that email is registered, we've sent a password reset link to it." };
+  const user = email ? findByEmail(email) : undefined;
+  if (user) {
+    const token = createResetToken(user.id);
+    const link = `${APP_URL}/#/reset-password/${token}`;
+    sendEmail(
+      user.email,
+      "Reset your Apex Poker password",
+      `<p>Someone requested a password reset for your Apex Poker account.</p>
+       <p><a href="${link}">${link}</a></p>
+       <p>This link expires in 30 minutes. If you didn't request this, you can safely ignore this email.</p>`
+    ).catch(() => {});
+  }
+  sendJson(ctx.res, 200, genericReply);
+});
+
+router.post("/api/auth/reset-password", async (ctx) => {
+  const body = ctx.body as { token?: string; password?: string };
+  const token = (body.token ?? "").trim();
+  const password = body.password ?? "";
+  if (password.length < 8) {
+    sendJson(ctx.res, 400, { error: "Password must be at least 8 characters" });
+    return;
+  }
+  const userId = token ? consumeResetToken(token) : null;
+  if (!userId) {
+    sendJson(ctx.res, 400, { error: "This reset link is invalid or has expired. Request a new one." });
+    return;
+  }
+  const { hash, salt } = hashPassword(password);
+  updatePassword(userId, hash, salt);
+  destroyAllSessionsForUser(userId); // force a fresh login everywhere, including any still-open session
+  sendJson(ctx.res, 200, { ok: true });
+});
+
+// Self-service account deletion. Only allowed with a zero wallet balance
+// and no active seat, so a player can't strand escrowed chips or vanish
+// mid-hand -- see db/users.ts anonymizeUser() for what actually happens to
+// the row (scrubbed, not hard-deleted, to keep hand history/ledger intact).
+router.post("/api/account/delete", async (ctx) => {
+  const userId = requireAuth(ctx);
+  const balance = getBalance(userId);
+  if (balance !== 0) {
+    sendJson(ctx.res, 400, {
+      error: `You have a balance of ${balance} chips. Withdraw your full balance before deleting your account.`,
+    });
+    return;
+  }
+  if (tableManager.isUserSeatedAnywhere(userId)) {
+    sendJson(ctx.res, 400, { error: "You're currently seated at a table. Stand up before deleting your account." });
+    return;
+  }
+  anonymizeUser(userId);
+  scrubKycForUser(userId);
+  destroyAllSessionsForUser(userId);
   sendJson(ctx.res, 200, { ok: true });
 });
 
