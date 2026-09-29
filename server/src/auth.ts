@@ -62,6 +62,14 @@ export function destroySession(token: string): void {
   deleteSessionStmt.run(token);
 }
 
+const deleteSessionsForUserStmt = db.prepare(`DELETE FROM sessions WHERE user_id = ?`);
+
+/** Logs a user out everywhere at once -- used after a password reset (so a
+ * stolen/old session can't survive it) and after account deletion. */
+export function destroyAllSessionsForUser(userId: string): void {
+  deleteSessionsForUserStmt.run(userId);
+}
+
 export function isAdmin(user: UserRow): boolean {
   const adminEmail = (process.env.ADMIN_EMAIL ?? "").toLowerCase().trim();
   return !!adminEmail && user.email === adminEmail;
