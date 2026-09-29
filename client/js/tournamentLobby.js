@@ -28,6 +28,7 @@ export async function renderTournamentLobby(root, navigate, currentUser) {
     <div class="nav-tabs">
       <button id="nav-cash">Cash Tables</button>
       <button class="active" id="nav-tourneys">Tournaments</button>
+      <button id="nav-player">Player</button>
     </div>
     <div class="lobby-toolbar">
       <h2 style="margin:0">Tournaments</h2>
@@ -41,6 +42,7 @@ export async function renderTournamentLobby(root, navigate, currentUser) {
   `;
 
   root.querySelector("#nav-cash").addEventListener("click", () => navigate("lobby"));
+  root.querySelector("#nav-player").addEventListener("click", () => navigate("player"));
 
   if (currentUser?.isAdmin) {
     root.querySelector("#create-tourney-btn").addEventListener("click", () => {
