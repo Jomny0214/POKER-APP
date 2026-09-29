@@ -63,6 +63,7 @@ export class Table {
   private currentActorSeat: number | null = null;
   private opts: TableOptions;
   private forcedOverride: ForcedBets | null = null;
+  private paused = false;
   public onBroadcastError: ((err: unknown) => void) | null = null;
 
   constructor(
@@ -85,6 +86,18 @@ export class Table {
 
   hasHandInProgress(): boolean {
     return !!this.engine && !this.engine.isComplete();
+  }
+
+  /** Tournament breaks: while paused, a hand that's already in progress
+   * finishes normally, but no new hand is dealt after it. Unpausing tries to
+   * start one immediately if players are ready. */
+  setPaused(paused: boolean): void {
+    this.paused = paused;
+    if (!paused) this.maybeStartHand();
+  }
+
+  isPaused(): boolean {
+    return this.paused;
   }
 
   /** Seats a player at a tournament table without touching the wallet (the
@@ -248,6 +261,7 @@ export class Table {
 
   private maybeStartHand(): void {
     if (this.engine && !this.engine.isComplete()) return;
+    if (this.paused) return;
     const eligible = this.activeSeats();
     if (eligible.length < 2) return;
 
@@ -447,6 +461,7 @@ export class Table {
       maxSeats: this.maxSeats,
       occupied: this.occupiedCount(),
       handInProgress: !!this.engine && !this.engine.isComplete(),
+      onBreak: this.paused,
     };
   }
 
@@ -473,6 +488,7 @@ export class Table {
       buttonSeatIndex: this.buttonSeatIndex,
       hand: engineState,
       yourSeat: userId ? this.seatOf(userId)?.index ?? null : null,
+      onBreak: this.paused,
     };
   }
 
