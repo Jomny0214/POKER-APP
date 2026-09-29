@@ -171,6 +171,12 @@ export class Table {
     return this.seats.find((s) => s?.userId === userId) ?? null;
   }
 
+  /** Public read-only check, used by account deletion to block a player
+   * from deleting their account while they're still seated somewhere. */
+  hasSeat(userId: string): boolean {
+    return !!this.seatOf(userId);
+  }
+
   occupiedCount(): number {
     return this.seats.filter((s) => s !== null).length;
   }
