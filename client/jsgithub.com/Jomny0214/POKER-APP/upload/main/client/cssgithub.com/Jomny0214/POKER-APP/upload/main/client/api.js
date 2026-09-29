@@ -31,6 +31,11 @@ export const api = {
   login: (email, password) =>
     request("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   logout: () => request("/api/auth/logout", { method: "POST" }),
+  forgotPassword: (email) =>
+    request("/api/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
+  resetPassword: (token, password) =>
+    request("/api/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) }),
+  deleteAccount: () => request("/api/account/delete", { method: "POST" }),
   me: () => request("/api/me"),
   balance: () => request("/api/wallet/balance"),
   history: () => request("/api/wallet/history"),
@@ -42,6 +47,15 @@ export const api = {
   adminHouseRevenue: () => request("/api/admin/house-revenue"),
   adminCollusionFlags: () => request("/api/admin/collusion-flags"),
   adminResolveCollusionFlag: (id) => request(`/api/admin/collusion-flags/${id}/resolve`, { method: "POST" }),
+  kycSubmit: (payload) => request("/api/kyc/submit", { method: "POST", body: JSON.stringify(payload) }),
+  kycMine: () => request("/api/kyc/mine"),
+  adminKycPending: () => request("/api/admin/kyc/pending"),
+  adminKycDetail: (id) => request(`/api/admin/kyc/${id}`),
+  adminKycApprove: (id) => request(`/api/admin/kyc/${id}/approve`, { method: "POST" }),
+  adminKycReject: (id, reason) => request(`/api/admin/kyc/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+  adminHandHistory: (limit) => request(`/api/admin/hand-history?limit=${limit || 50}`),
+  adminHandDetail: (id) => request(`/api/admin/hand-history/${id}`),
+  verifyHand: (id) => request(`/api/hands/${id}/verify`),
   tables: () => request("/api/tables"),
 
   tournamentsMeta: () => request("/api/tournaments/meta"),
