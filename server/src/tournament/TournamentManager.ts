@@ -91,6 +91,15 @@ const getTournamentStmt = db.prepare(`SELECT * FROM tournaments WHERE id = ?`);
 const listTournamentsStmt = db.prepare(`SELECT * FROM tournaments ORDER BY scheduled_start_at DESC`);
 const listByStatusStmt = db.prepare(`SELECT * FROM tournaments WHERE status = ?`);
 const updateStatusStmt = db.prepare(`UPDATE tournaments SET status = ? WHERE id = ?`);
+const updateTournamentStmt = db.prepare(`
+  UPDATE tournaments SET
+    name = ?, variant_id = ?, table_size = ?, buyin = ?, starting_stack = ?, rebuy_allowed = ?,
+    rebuy_price = ?, rebuy_period_type = ?, rebuy_period_value = ?, max_tables = ?, blind_schedule = ?,
+    scheduled_start_at = ?
+  WHERE id = ? AND status = 'registering'
+`);
+const deleteTournamentStmt = db.prepare(`DELETE FROM tournaments WHERE id = ? AND status = 'registering'`);
+const deleteAllEntriesStmt = db.prepare(`DELETE FROM tournament_entries WHERE tournament_id = ?`);
 const updatePrizePoolStmt = db.prepare(`UPDATE tournaments SET prize_pool = prize_pool + ? WHERE id = ?`);
 const startTournamentStmt = db.prepare(
   `UPDATE tournaments SET status = 'running', started_at = ?, current_level = 0, level_started_at = ? WHERE id = ?`
@@ -199,7 +208,14 @@ export class TournamentManager {
   // Admin: create
   // -------------------------------------------------------------------
 
-  create(adminUserId: string, input: CreateTournamentInput): TournamentRow {
+  /** Shared validation for create() and update() -- same rules either way. */
+  private validateInput(input: CreateTournamentInput): {
+    name: string;
+    levels: BlindLevel[];
+    rebuyPeriodType: "levels" | "minutes" | null;
+    rebuyPeriodValue: number | null;
+    rebuyPrice: number;
+  } {
     const name = (input.name ?? "").trim();
     if (!name) throw new Error("Name is required");
     if (!TOURNAMENT_VARIANTS.includes(input.variantId as TournamentVariantId)) {
@@ -241,6 +257,12 @@ export class TournamentManager {
       if (!Number.isFinite(rebuyPrice) || rebuyPrice <= 0) throw new Error("Rebuy price must be a positive number");
     }
 
+    return { name, levels, rebuyPeriodType, rebuyPeriodValue, rebuyPrice };
+  }
+
+  create(adminUserId: string, input: CreateTournamentInput): TournamentRow {
+    const { name, levels, rebuyPeriodType, rebuyPeriodValue, rebuyPrice } = this.validateInput(input);
+
     const id = randomUUID();
     const now = Date.now();
     insertTournamentStmt.run(
@@ -261,6 +283,59 @@ export class TournamentManager {
       now
     );
     return this.get(id)!;
+  }
+
+  /** Edits a tournament that hasn't started yet and has no one registered
+   * yet -- once someone has paid a buy-in, changing the buy-in, schedule, or
+   * blind structure underneath them gets messy, so editing is blocked at
+   * that point (cancel and recreate instead). */
+  update(tournamentId: string, input: CreateTournamentInput): TournamentRow {
+    const t = this.get(tournamentId);
+    if (!t) throw new Error("Tournament not found");
+    if (t.status !== "registering") throw new Error("Only a tournament that hasn't started can be edited");
+    if (this.entries(tournamentId).length > 0) {
+      throw new Error("Can't edit a tournament once players have registered -- cancel it and create a new one instead");
+    }
+
+    const { name, levels, rebuyPeriodType, rebuyPeriodValue, rebuyPrice } = this.validateInput(input);
+    updateTournamentStmt.run(
+      name,
+      input.variantId,
+      input.tableSize,
+      Math.floor(input.buyin),
+      Math.floor(input.startingStack),
+      input.rebuyAllowed ? 1 : 0,
+      Math.floor(rebuyPrice),
+      rebuyPeriodType,
+      rebuyPeriodValue,
+      Math.floor(input.maxTables),
+      JSON.stringify(levels),
+      Math.floor(input.scheduledStartAt),
+      tournamentId
+    );
+    const updated = this.get(tournamentId);
+    if (!updated) throw new Error("Tournament not found");
+    return updated;
+  }
+
+  /** Deletes a tournament that hasn't started yet, refunding every
+   * registered player's buy-in (fee included) first. Tournaments that have
+   * already started can only be force-ended, not deleted. */
+  remove(tournamentId: string): void {
+    const t = this.get(tournamentId);
+    if (!t) throw new Error("Tournament not found");
+    if (t.status !== "registering") throw new Error("Only a tournament that hasn't started can be deleted");
+
+    const registered = listRegisteredEntriesStmt.all(tournamentId) as unknown as EntryRow[];
+    const fee = applyRate(t.buyin, TOURNAMENT_FEE_RATE);
+    withTransaction(() => {
+      for (const e of registered) {
+        credit(e.user_id, "tournament_cashout", t.buyin, `tournament-deleted-${tournamentId}`);
+        reverseTournamentFee(tournamentId, e.user_id, fee, `tournament-deleted-${tournamentId}`);
+      }
+      deleteAllEntriesStmt.run(tournamentId);
+      deleteTournamentStmt.run(tournamentId);
+    });
   }
 
   get(id: string): TournamentRow | undefined {
