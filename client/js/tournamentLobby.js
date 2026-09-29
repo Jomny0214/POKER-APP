@@ -133,15 +133,16 @@ function renderCreateForm(mount, onCreated) {
       <label class="span-2" id="f-custom-wrap" style="display:none">Custom levels (JSON array of {smallBlind,bigBlind,ante,durationMinutes})
         <textarea id="f-custom">[{"smallBlind":25,"bigBlind":50,"ante":0,"durationMinutes":15}]</textarea>
       </label>
-      <label><input id="f-rebuy" type="checkbox" style="width:auto" /> Allow rebuys</label>
-      <label>Rebuy price<input id="f-rebuy-price" type="number" min="1" value="1000" disabled /></label>
+      <label><input id="f-rebuy" type="checkbox" style="width:auto" checked /> Allow rebuys / re-entry</label>
+      <label>Rebuy price<input id="f-rebuy-price" type="number" min="1" value="1000" /></label>
       <label>Rebuy window type
-        <select id="f-rebuy-type" disabled>
+        <select id="f-rebuy-type">
           <option value="levels">First N levels</option>
           <option value="minutes">First N minutes</option>
         </select>
       </label>
-      <label>Rebuy window value<input id="f-rebuy-value" type="number" min="1" value="4" disabled /></label>
+      <label>Rebuy window value<input id="f-rebuy-value" type="number" min="1" value="14" /></label>
+      <div class="meta span-2" style="margin-top:-6px">Default of 14 "levels" matches the house structure's re-entry window (through the end of real level 13; the extra 1 accounts for the break that falls before it).</div>
     </div>
     <div class="row" style="margin-top:14px">
       <button class="primary" id="f-submit">Create Tournament</button>
@@ -222,7 +223,7 @@ export async function renderTournamentDetail(root, tournamentId, navigate, curre
 
     const level = t.currentLevelInfo;
     const levelText = level
-      ? `${level.smallBlind}/${level.bigBlind}${level.ante ? ` (ante ${level.ante})` : ""} &middot; Level ${t.currentLevel + 1}/${t.totalLevels}`
+      ? `${level.isBreak ? "ON BREAK &middot; " : ""}${level.smallBlind}/${level.bigBlind}${level.ante ? ` (ante ${level.ante})` : ""} &middot; Level ${t.currentLevel + 1}/${t.totalLevels}`
       : "—";
 
     let actionHtml = "";
