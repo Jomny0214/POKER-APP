@@ -144,6 +144,20 @@ interface LiveTournament {
   levels: BlindLevel[];
 }
 
+/** Resolves what a table should actually be doing at a given schedule index:
+ * the blinds currently in play (looking back past any break to the last real
+ * level, since a break doesn't change blinds) and whether tables should be
+ * paused (no new hands dealt) because that index is a break. */
+function resolveScheduleIndex(levels: BlindLevel[], index: number): { blinds: BlindLevel; paused: boolean } {
+  const idx = Math.min(Math.max(index, 0), levels.length - 1);
+  const at = levels[idx];
+  if (!at.isBreak) return { blinds: at, paused: false };
+  for (let i = idx - 1; i >= 0; i--) {
+    if (!levels[i].isBreak) return { blinds: levels[i], paused: true };
+  }
+  return { blinds: at, paused: true }; // schedules never start on a break, but stay safe
+}
+
 export class TournamentManager {
   private live = new Map<string, LiveTournament>();
 
@@ -168,9 +182,10 @@ export class TournamentManager {
       byTable.get(e.table_no)!.push(e);
     }
     const live: LiveTournament = { tables: new Map(), levels };
-    const level = levels[Math.min(t.current_level, levels.length - 1)];
+    const { blinds, paused } = resolveScheduleIndex(levels, t.current_level);
     for (const [tableNo, entries] of byTable) {
-      const table = this.makeTable(t, variant, tableNo, level);
+      const table = this.makeTable(t, variant, tableNo, blinds);
+      table.setPaused(paused);
       for (const e of entries) {
         if (e.seat_index === null || e.stack <= 0) continue;
         table.seatTournamentPlayer(e.user_id, e.username, e.seat_index, e.stack);
@@ -464,9 +479,10 @@ export class TournamentManager {
       }
       if (changed) {
         advanceLevelStmt.run(current, levelStartedAt, t.id);
-        const level = live.levels[current];
+        const { blinds, paused } = resolveScheduleIndex(live.levels, current);
         for (const table of live.tables.values()) {
-          table.setBlinds(level.smallBlind, level.bigBlind, level.ante);
+          table.setBlinds(blinds.smallBlind, blinds.bigBlind, blinds.ante);
+          table.setPaused(paused);
         }
       }
     }
