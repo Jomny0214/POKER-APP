@@ -30,7 +30,8 @@ export const api = {
     request("/api/auth/register", { method: "POST", body: JSON.stringify({ email, username, password }) }),
   login: (email, password) =>
     request("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
-  logout: () => request("/api/auth/logout", { method: "POST" }),forgotPassword: (email) =>
+  logout: () => request("/api/auth/logout", { method: "POST" }),
+  forgotPassword: (email) =>
     request("/api/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) }),
   resetPassword: (token, password) =>
     request("/api/auth/reset-password", { method: "POST", body: JSON.stringify({ token, password }) }),
@@ -62,6 +63,9 @@ export const api = {
   tournament: (id) => request(`/api/tournaments/${id}`),
   createTournament: (input) =>
     request("/api/admin/tournaments", { method: "POST", body: JSON.stringify(input) }),
+  updateTournament: (id, input) =>
+    request(`/api/admin/tournaments/${id}/update`, { method: "POST", body: JSON.stringify(input) }),
+  deleteTournament: (id) => request(`/api/admin/tournaments/${id}/delete`, { method: "POST" }),
   forceEndTournament: (id) => request(`/api/admin/tournaments/${id}/force-end`, { method: "POST" }),
   registerTournament: (id) => request(`/api/tournaments/${id}/register`, { method: "POST" }),
   unregisterTournament: (id) => request(`/api/tournaments/${id}/unregister`, { method: "POST" }),

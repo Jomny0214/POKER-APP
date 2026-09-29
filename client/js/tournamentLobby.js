@@ -104,48 +104,65 @@ export async function renderTournamentLobby(root, navigate, currentUser) {
   return () => clearInterval(pollInterval);
 }
 
-function renderCreateForm(mount, onCreated) {
+// `existing` (optional): the full tournament object (from api.tournament(id),
+// which carries blindSchedule) to edit in place instead of creating a new
+// one. Only ever passed for a "registering" tournament with nobody
+// registered yet -- the server enforces that too.
+function renderCreateForm(mount, onDone, existing = null) {
+  const isEdit = !!existing;
+  const startLocalValue = existing ? new Date(existing.scheduledStartAt).toISOString().slice(0, 16) : "";
+
   mount.innerHTML = `<div class="panel" style="background:var(--panel);border:1px solid #24333f;border-radius:var(--radius);padding:16px;margin-bottom:16px">
-    <h3 style="margin-top:0">New Tournament</h3>
+    <h3 style="margin-top:0">${isEdit ? `Edit "${existing.name}"` : "New Tournament"}</h3>
     <div class="form-grid">
-      <label>Name<input id="f-name" type="text" placeholder="Sunday Special" /></label>
+      <label>Name<input id="f-name" type="text" placeholder="Sunday Special" value="${isEdit ? existing.name : ""}" /></label>
       <label>Variant
         <select id="f-variant">
-          <option value="holdem">Texas Hold'em</option>
-          <option value="omaha">Omaha</option>
+          <option value="holdem" ${isEdit && existing.variantId === "holdem" ? "selected" : ""}>Texas Hold'em</option>
+          <option value="omaha" ${isEdit && existing.variantId === "omaha" ? "selected" : ""}>Omaha</option>
         </select>
       </label>
       <label>Table size
-        <select id="f-size"><option value="9">9-max</option><option value="6">6-max</option></select>
+        <select id="f-size">
+          <option value="9" ${isEdit && existing.tableSize === 9 ? "selected" : ""}>9-max</option>
+          <option value="6" ${isEdit && existing.tableSize === 6 ? "selected" : ""}>6-max</option>
+        </select>
       </label>
-      <label>Buy-in (chips)<input id="f-buyin" type="number" min="1" value="1000" /></label>
-      <label>Starting stack<input id="f-stack" type="number" min="1" value="10000" /></label>
-      <label>Max tables (cap 100)<input id="f-maxtables" type="number" min="1" max="100" value="20" /></label>
-      <label>Scheduled start<input id="f-start" type="datetime-local" /></label>
+      <label>Buy-in (chips)<input id="f-buyin" type="number" min="1" value="${isEdit ? existing.buyin : 1000}" /></label>
+      <label>Starting stack<input id="f-stack" type="number" min="1" value="${isEdit ? existing.startingStack : 10000}" /></label>
+      <label>Max tables (cap 100)<input id="f-maxtables" type="number" min="1" max="100" value="${isEdit ? existing.maxTables : 20}" /></label>
+      <label>Scheduled start<input id="f-start" type="datetime-local" value="${startLocalValue}" /></label>
       <label>Blind schedule
         <select id="f-preset">
-          <option value="standard">Standard (~15 min levels)</option>
-          <option value="turbo">Turbo (~5 min levels)</option>
-          <option value="hyperturbo">Hyper-Turbo (~3 min levels)</option>
-          <option value="custom">Custom (JSON)</option>
+          <option value="standard">Standard (~15 min levels, with breaks)</option>
+          <option value="turbo">Turbo (~5 min levels, with breaks)</option>
+          <option value="hyperturbo">Hyper-Turbo (~3 min levels, with breaks)</option>
+          <option value="custom" ${isEdit ? "selected" : ""}>Custom (JSON)</option>
         </select>
       </label>
-      <label class="span-2" id="f-custom-wrap" style="display:none">Custom levels (JSON array of {smallBlind,bigBlind,ante,durationMinutes})
-        <textarea id="f-custom">[{"smallBlind":25,"bigBlind":50,"ante":0,"durationMinutes":15}]</textarea>
+      <label class="span-2" id="f-custom-wrap" style="display:${isEdit ? "flex" : "none"}">Custom levels (JSON array of {smallBlind,bigBlind,ante,durationMinutes,isBreak?})
+        <textarea id="f-custom">${
+          isEdit ? JSON.stringify(existing.blindSchedule) : '[{"smallBlind":25,"bigBlind":50,"ante":0,"durationMinutes":15}]'
+        }</textarea>
       </label>
-      <label><input id="f-rebuy" type="checkbox" style="width:auto" checked /> Allow rebuys / re-entry</label>
-      <label>Rebuy price<input id="f-rebuy-price" type="number" min="1" value="1000" /></label>
+      <label><input id="f-rebuy" type="checkbox" style="width:auto" ${!isEdit || existing.rebuyAllowed ? "checked" : ""} /> Allow rebuys / re-entry</label>
+      <label>Rebuy price<input id="f-rebuy-price" type="number" min="1" value="${isEdit && existing.rebuyPrice ? existing.rebuyPrice : 1000}" /></label>
       <label>Rebuy window type
         <select id="f-rebuy-type">
-          <option value="levels">First N levels</option>
-          <option value="minutes">First N minutes</option>
+          <option value="levels" ${!isEdit || existing.rebuyPeriodType === "levels" ? "selected" : ""}>First N levels</option>
+          <option value="minutes" ${isEdit && existing.rebuyPeriodType === "minutes" ? "selected" : ""}>First N minutes</option>
         </select>
       </label>
-      <label>Rebuy window value<input id="f-rebuy-value" type="number" min="1" value="14" /></label>
-      <div class="meta span-2" style="margin-top:-6px">Default of 14 "levels" matches the house structure's re-entry window (through the end of real level 13; the extra 1 accounts for the break that falls before it).</div>
+      <label>Rebuy window value<input id="f-rebuy-value" type="number" min="1" value="${isEdit && existing.rebuyPeriodValue ? existing.rebuyPeriodValue : 14}" /></label>
+      ${
+        isEdit
+          ? ""
+          : `<div class="meta span-2" style="margin-top:-6px">Default of 14 "levels" matches the house structure's re-entry window (through the end of real level 13; the extra 1 accounts for the break that falls before it).</div>`
+      }
     </div>
     <div class="row" style="margin-top:14px">
-      <button class="primary" id="f-submit">Create Tournament</button>
+      <button class="primary" id="f-submit">${isEdit ? "Save Changes" : "Create Tournament"}</button>
+      ${isEdit ? `<button id="f-cancel">Cancel</button>` : ""}
     </div>
   </div>`;
 
@@ -157,9 +174,14 @@ function renderCreateForm(mount, onCreated) {
 
   const rebuyChk = mount.querySelector("#f-rebuy");
   const rebuyFields = ["#f-rebuy-price", "#f-rebuy-type", "#f-rebuy-value"].map((s) => mount.querySelector(s));
-  rebuyChk.addEventListener("change", () => {
+  const syncRebuyFields = () => {
     for (const el of rebuyFields) el.disabled = !rebuyChk.checked;
-  });
+  };
+  syncRebuyFields();
+  rebuyChk.addEventListener("change", syncRebuyFields);
+
+  const cancelBtn = mount.querySelector("#f-cancel");
+  if (cancelBtn) cancelBtn.addEventListener("click", () => onDone(false));
 
   mount.querySelector("#f-submit").addEventListener("click", async () => {
     try {
@@ -188,10 +210,15 @@ function renderCreateForm(mount, onCreated) {
         input.blindPreset = presetSel.value;
       }
 
-      await api.createTournament(input);
-      toast(`Tournament "${input.name}" created`);
+      if (isEdit) {
+        await api.updateTournament(existing.id, input);
+        toast(`Tournament "${input.name}" updated`);
+      } else {
+        await api.createTournament(input);
+        toast(`Tournament "${input.name}" created`);
+      }
       mount.innerHTML = "";
-      onCreated();
+      onDone(true);
     } catch (err) {
       toast(err.message, "error");
     }
@@ -245,10 +272,12 @@ export async function renderTournamentDetail(root, tournamentId, navigate, curre
       actionHtml = `<div class="meta">You finished in place ${t.you.finishRank ?? "?"}${t.you.payout ? ` — paid ${t.you.payout} chips` : ""}.</div>`;
     }
 
-    const adminHtml =
-      currentUser?.isAdmin && t.status === "running"
-        ? `<button class="danger" id="force-end-btn">Force End Tournament</button>`
-        : "";
+    let adminHtml = "";
+    if (currentUser?.isAdmin && t.status === "running") {
+      adminHtml = `<button class="danger" id="force-end-btn">Force End Tournament</button>`;
+    } else if (currentUser?.isAdmin && t.status === "registering") {
+      adminHtml = `<button id="edit-tourney-btn">Edit</button><button class="danger" id="delete-tourney-btn">Delete Tournament</button>`;
+    }
 
     wrap.innerHTML = `
       <div class="panel">
@@ -268,6 +297,7 @@ export async function renderTournamentDetail(root, tournamentId, navigate, curre
         </div>
         <div class="row">${actionHtml}${adminHtml}</div>
       </div>
+      <div id="edit-tourney-mount"></div>
       <div class="panel">
         <details id="blind-structure-details">
           <summary style="cursor:pointer;font-weight:600">
@@ -372,6 +402,37 @@ export async function renderTournamentDetail(root, tournamentId, navigate, curre
           await api.forceEndTournament(tournamentId);
           toast("Tournament ended");
           load();
+        } catch (err) {
+          toast(err.message, "error");
+        }
+      });
+    }
+    const editBtn = wrap.querySelector("#edit-tourney-btn");
+    if (editBtn) {
+      editBtn.addEventListener("click", () => {
+        const editMount = wrap.querySelector("#edit-tourney-mount");
+        if (editMount.innerHTML) {
+          editMount.innerHTML = "";
+        } else {
+          renderCreateForm(
+            editMount,
+            (saved) => {
+              editMount.innerHTML = "";
+              if (saved) load();
+            },
+            t
+          );
+        }
+      });
+    }
+    const deleteBtn = wrap.querySelector("#delete-tourney-btn");
+    if (deleteBtn) {
+      deleteBtn.addEventListener("click", async () => {
+        if (!confirm(`Delete "${t.name}"? Any registered players will be refunded their buy-in.`)) return;
+        try {
+          await api.deleteTournament(tournamentId);
+          toast("Tournament deleted");
+          navigate("tournaments");
         } catch (err) {
           toast(err.message, "error");
         }
