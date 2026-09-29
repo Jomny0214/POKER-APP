@@ -269,6 +269,23 @@ export async function renderTournamentDetail(root, tournamentId, navigate, curre
         <div class="row">${actionHtml}${adminHtml}</div>
       </div>
       <div class="panel">
+        <details id="blind-structure-details">
+          <summary style="cursor:pointer;font-weight:600">
+            Blind Structure (${t.totalLevels} levels${
+              t.blindSchedule.filter((l) => l.isBreak).length
+                ? `, ${t.blindSchedule.filter((l) => l.isBreak).length} breaks`
+                : ""
+            })
+          </summary>
+          <div style="max-height:360px;overflow-y:auto;margin-top:10px">
+            <table class="standings-table">
+              <thead><tr><th>Level</th><th>Duration</th><th>Small</th><th>Big</th><th>Ante</th></tr></thead>
+              <tbody id="blind-structure-body"></tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+      <div class="panel">
         <h3 style="margin-top:0">Standings</h3>
         <table class="standings-table">
           <thead><tr><th>#</th><th>Player</th><th>Status</th><th>Stack</th><th>Rebuys</th><th>Payout</th></tr></thead>
@@ -276,6 +293,31 @@ export async function renderTournamentDetail(root, tournamentId, navigate, curre
         </table>
       </div>
     `;
+
+    const blindBody = wrap.querySelector("#blind-structure-body");
+    t.blindSchedule.forEach((l, i) => {
+      const tr = document.createElement("tr");
+      const isCurrent = t.status === "running" && i === t.currentLevel;
+      tr.className = `${l.isBreak ? "break-row" : ""} ${isCurrent ? "you" : ""}`.trim();
+      if (l.isBreak) {
+        tr.innerHTML = `<td>${i + 1}</td><td>${l.durationMinutes} min</td><td colspan="3" style="text-align:center">— BREAK —</td>`;
+      } else {
+        tr.innerHTML = `
+          <td>${i + 1}${isCurrent ? " ◂ now" : ""}</td>
+          <td>${l.durationMinutes} min</td>
+          <td>${l.smallBlind}</td>
+          <td>${l.bigBlind}</td>
+          <td>${l.ante || "—"}</td>
+        `;
+      }
+      blindBody.appendChild(tr);
+    });
+    // Jump the scrollable structure list to the current level when running,
+    // so the player isn't stuck scrolling from level 1 to find where play is.
+    if (t.status === "running") {
+      const currentRow = blindBody.children[t.currentLevel];
+      if (currentRow) currentRow.scrollIntoView({ block: "center" });
+    }
 
     const tbody = wrap.querySelector("#standings-body");
     t.standings.forEach((s, i) => {
