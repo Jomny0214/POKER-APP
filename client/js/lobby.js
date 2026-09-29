@@ -9,6 +9,7 @@ import { renderKycPanel } from "./kyc.js";
 import { renderKycAdminPanel } from "./kycadmin.js";
 import { renderHandHistoryPanel } from "./handhistory.js";
 import { renderChatPanel } from "./chat.js";
+import { renderAccountPanel } from "./account.js";
 
 export async function renderLobby(root, navigate, onBalanceChange, currentUser) {
   root.innerHTML = `
@@ -21,6 +22,7 @@ export async function renderLobby(root, navigate, onBalanceChange, currentUser) 
     <div id="hand-history-mount"></div>
     <div id="collusion-panel-mount"></div>
     <div id="chat-panel-mount"></div>
+    <div id="account-panel-mount"></div>
     <div class="nav-tabs">
       <button class="active" id="nav-cash">Cash Tables</button>
       <button id="nav-tourneys">Tournaments</button>
@@ -43,6 +45,7 @@ export async function renderLobby(root, navigate, onBalanceChange, currentUser) 
   renderHandHistoryPanel(root.querySelector("#hand-history-mount"), currentUser);
   renderCollusionPanel(root.querySelector("#collusion-panel-mount"), currentUser);
   renderChatPanel(root.querySelector("#chat-panel-mount"), currentUser);
+  renderAccountPanel(root.querySelector("#account-panel-mount"), currentUser, () => location.reload());
 
   async function load() {
     const { tables } = await api.tables();
