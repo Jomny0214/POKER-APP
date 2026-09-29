@@ -31,6 +31,16 @@ export class TableManager {
     return this.tables.get(id);
   }
 
+  /** True if this user currently occupies a seat at ANY table (cash or
+   * tournament) -- used to block account deletion while seated, so a
+   * deletion can't strand chips/seats mid-hand. */
+  isUserSeatedAnywhere(userId: string): boolean {
+    for (const table of this.tables.values()) {
+      if (table.hasSeat(userId)) return true;
+    }
+    return false;
+  }
+
   /** Registers a tournament table so the existing WS handlers (subscribe,
    * sit/standup/action/draw dispatch on tableManager.get(tableId)) work
    * against it exactly like a cash table. */
