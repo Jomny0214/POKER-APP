@@ -2,6 +2,7 @@ import { api, getToken, setToken } from "./api.js";
 import { renderAuth } from "./auth.js";
 import { renderResetPassword } from "./resetPassword.js";
 import { renderLobby } from "./lobby.js";
+import { renderPlayerTab } from "./player.js";
 import { renderTable } from "./table.js";
 import { renderTournamentLobby, renderTournamentDetail } from "./tournamentLobby.js";
 import { gameSocket } from "./ws.js";
@@ -73,8 +74,10 @@ async function route() {
     cleanupLobbyView = await renderTournamentDetail(root, tournamentId, navigate, currentUser);
   } else if (hash === "tournaments") {
     cleanupLobbyView = await renderTournamentLobby(root, navigate, currentUser);
+  } else if (hash === "player") {
+    cleanupLobbyView = await renderPlayerTab(root, navigate, (balance) => renderHeader(balance), currentUser);
   } else {
-    cleanupLobbyView = await renderLobby(root, navigate, (balance) => renderHeader(balance), currentUser);
+    cleanupLobbyView = await renderLobby(root, navigate, currentUser);
   }
 }
 
