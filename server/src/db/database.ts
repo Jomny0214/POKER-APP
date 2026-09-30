@@ -196,6 +196,15 @@ try {
   // column already exists
 }
 
+// Timestamp of the moment a tournament entry's stack hit 0. Starts their
+// 25-second rebuy clock -- cleared on a successful rebuy, left set until the
+// clock runs out and they're auto-eliminated.
+try {
+  db.exec(`ALTER TABLE tournament_entries ADD COLUMN zero_at INTEGER;`);
+} catch {
+  // column already exists
+}
+
 // One-time-use tokens for the "forgot password" email flow. A row is
 // consumed (used = 1) the moment it's redeemed, and a fresh request
 // invalidates any earlier outstanding token for that user (see
