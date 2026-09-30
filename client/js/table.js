@@ -73,6 +73,12 @@ export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
   function stopTourneyPoll() {
     if (tourneyPollInterval) clearInterval(tourneyPollInterval);
     tourneyPollInterval = null;
+    stopRebuyCountdown();
+  }
+  let rebuyCountdownInterval = null;
+  function stopRebuyCountdown() {
+    if (rebuyCountdownInterval) clearInterval(rebuyCountdownInterval);
+    rebuyCountdownInterval = null;
   }
   async function pollTourney() {
     if (!tournamentId) return;
@@ -108,21 +114,15 @@ export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
         : "";
 
     // Rebuy option: you're still "active" (not finished/busted) but sitting
-    // at 0 chips -- this happens when a rebuy window is open and the server
-    // deliberately left your seat in place instead of eliminating you.
-    // We check the live seat stack from the websocket state (lastState)
-    // rather than the tournament API, since the tournament summary doesn't
-    // include your current chip count.
+    // at 0 chips. The server starts a fixed 25-second clock the moment you
+    // bust (t.you.zeroAt) -- if you don't hit Rebuy before it runs out,
+    // you're auto-eliminated. This countdown ticks down locally every
+    // second so it's obvious the clock is actually running.
+    stopRebuyCountdown();
     let rebuyHtml = "";
-    if (
-      t.rebuyAllowed &&
-      t.you.registered &&
-      t.you.status === "active" &&
-      lastState &&
-      lastState.yourSeat != null &&
-      (lastState.seats[lastState.yourSeat]?.stack ?? 0) <= 0
-    ) {
-      rebuyHtml = `<div class="stat rank-banner"><button id="sidebar-rebuy-btn" class="primary">Rebuy — ${t.rebuyPrice} chips</button></div>`;
+    if (t.rebuyAllowed && t.you.registered && t.you.status === "active" && (t.you.stack ?? 0) <= 0) {
+      const secsLeft = t.you.zeroAt != null ? Math.max(0, 25 - Math.floor((Date.now() - t.you.zeroAt) / 1000)) : 25;
+      rebuyHtml = `<div class="stat rank-banner"><button id="sidebar-rebuy-btn" class="primary">Rebuy — ${t.rebuyPrice} chips (<span id="rebuy-countdown">${secsLeft}</span>s)</button></div>`;
     }
 
     bar.innerHTML = `
@@ -135,6 +135,19 @@ export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
       ${rebuyHtml}
     `;
     const rebuyBtn = bar.querySelector("#sidebar-rebuy-btn");
+    if (rebuyBtn && t.you.zeroAt != null) {
+      const zeroAt = t.you.zeroAt;
+      rebuyCountdownInterval = setInterval(() => {
+        const span = bar.querySelector("#rebuy-countdown");
+        if (!span) {
+          stopRebuyCountdown();
+          return;
+        }
+        const left = Math.max(0, 25 - Math.floor((Date.now() - zeroAt) / 1000));
+        span.textContent = String(left);
+        if (left <= 0) stopRebuyCountdown();
+      }, 1000);
+    }
     if (rebuyBtn) {
       rebuyBtn.addEventListener("click", async () => {
         rebuyBtn.disabled = true;
