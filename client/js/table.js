@@ -106,6 +106,25 @@ export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
       t.you.status === "busted"
         ? `<div class="stat rank-banner">You finished ${t.you.finishRank ?? "?"}${t.you.payout ? ` — paid ${t.you.payout}` : ""}</div>`
         : "";
+
+    // Rebuy option: you're still "active" (not finished/busted) but sitting
+    // at 0 chips -- this happens when a rebuy window is open and the server
+    // deliberately left your seat in place instead of eliminating you.
+    // We check the live seat stack from the websocket state (lastState)
+    // rather than the tournament API, since the tournament summary doesn't
+    // include your current chip count.
+    let rebuyHtml = "";
+    if (
+      t.rebuyAllowed &&
+      t.you.registered &&
+      t.you.status === "active" &&
+      lastState &&
+      lastState.yourSeat != null &&
+      (lastState.seats[lastState.yourSeat]?.stack ?? 0) <= 0
+    ) {
+      rebuyHtml = `<div class="stat rank-banner"><button id="sidebar-rebuy-btn" class="primary">Rebuy — ${t.rebuyPrice} chips</button></div>`;
+    }
+
     bar.innerHTML = `
       <div class="stat"><div class="label">Level</div><div class="value">${t.currentLevel + 1}/${t.totalLevels}</div></div>
       <div class="stat"><div class="label">Blinds</div><div class="value">${level ? `${level.smallBlind}/${level.bigBlind}${level.ante ? ` (${level.ante} ante)` : ""}` : "—"}</div></div>
@@ -113,7 +132,21 @@ export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
       <div class="stat"><div class="label">Players left</div><div class="value">${t.entrants.active}</div></div>
       <div class="stat"><div class="label">Prize pool</div><div class="value">${t.prizePool}</div></div>
       ${rankHtml}
+      ${rebuyHtml}
     `;
+    const rebuyBtn = bar.querySelector("#sidebar-rebuy-btn");
+    if (rebuyBtn) {
+      rebuyBtn.addEventListener("click", async () => {
+        rebuyBtn.disabled = true;
+        try {
+          await api.rebuyTournament(tournamentId);
+          toast("Rebought! Chips added.");
+        } catch (err) {
+          toast(err.message, "error");
+          rebuyBtn.disabled = false;
+        }
+      });
+    }
   }
   if (tournamentId) {
     pollTourney();
