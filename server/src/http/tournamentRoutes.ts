@@ -90,6 +90,7 @@ router.get("/api/tournaments/:id", async (ctx) => {
       return b.stack - a.stack;
     })
     .map((e) => ({
+      userId: e.user_id,
       username: e.username,
       status: e.status,
       stack: e.stack,
@@ -99,7 +100,15 @@ router.get("/api/tournaments/:id", async (ctx) => {
       rebuysUsed: e.rebuys_used,
     }));
 
-  let you: { registered: boolean; status?: string; tableId?: string; finishRank?: number | null; payout?: number | null } = {
+  let you: {
+    registered: boolean;
+    status?: string;
+    tableId?: string;
+    finishRank?: number | null;
+    payout?: number | null;
+    stack?: number;
+    zeroAt?: number | null;
+  } = {
     registered: false,
   };
   if (ctx.userId) {
@@ -112,6 +121,8 @@ router.get("/api/tournaments/:id", async (ctx) => {
         tableId: table?.id,
         finishRank: entry.finish_rank,
         payout: entry.payout,
+        stack: entry.stack,
+        zeroAt: entry.zero_at,
       };
     }
   }
@@ -211,6 +222,19 @@ router.post("/api/admin/tournaments/:id/delete", async (ctx) => {
   try {
     tournamentManager.remove(ctx.params.id);
     sendJson(ctx.res, 200, { ok: true });
+  } catch (err) {
+    sendJson(ctx.res, 400, { error: (err as Error).message });
+  }
+});
+
+router.post("/api/admin/tournaments/:id/eliminate", async (ctx) => {
+  requireAuth(ctx);
+  requireAdmin(ctx);
+  const body = ctx.body as { userId?: string };
+  try {
+    if (!body.userId) throw new Error("userId is required");
+    tournamentManager.adminEliminate(ctx.params.id, body.userId);
+    sendJson(ctx.res, 200, summarize(tournamentManager.get(ctx.params.id)!));
   } catch (err) {
     sendJson(ctx.res, 400, { error: (err as Error).message });
   }
