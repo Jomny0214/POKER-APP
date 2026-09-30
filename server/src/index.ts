@@ -48,10 +48,10 @@ wss.startHeartbeat();
 // the moment of a restart is not, same as cash tables).
 tournamentManager.init();
 
-// Starts due tournaments, advances blind levels, closes expired rebuy
-// windows and rebalances tables. 15s is frequent enough that a scheduled
-// start or a level change never lags by more than that.
-const TOURNAMENT_TICK_MS = 15_000;
+// Starts due tournaments, advances blind levels, auto-eliminates anyone
+// whose 25-second rebuy clock ran out, and rebalances tables. 5s keeps that
+// elimination close to the real 25-second mark instead of lagging behind it.
+const TOURNAMENT_TICK_MS = 5_000;
 setInterval(() => tournamentManager.tick(), TOURNAMENT_TICK_MS);
 
 server.listen(PORT, () => {
