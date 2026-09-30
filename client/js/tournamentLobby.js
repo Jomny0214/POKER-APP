@@ -19,6 +19,21 @@ function statusPill(status) {
   return `<span class="status-pill ${status}">${label}</span>`;
 }
 
+function ordinal(n) {
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
 // ---------------------------------------------------------------------
 // Lobby list
 // ---------------------------------------------------------------------
@@ -323,6 +338,19 @@ export async function renderTournamentDetail(root, tournamentId, navigate, curre
         </details>
       </div>
       <div class="panel">
+        <details id="payouts-details">
+          <summary style="cursor:pointer;font-weight:600">
+            Prize Pool / Payouts — ${t.prizePool} chips (${t.paidSpots} paid)
+          </summary>
+          <div style="max-height:360px;overflow-y:auto;margin-top:10px">
+            <table class="standings-table">
+              <thead><tr><th>Place</th><th>Prize</th></tr></thead>
+              <tbody id="payouts-body"></tbody>
+            </table>
+          </div>
+        </details>
+      </div>
+      <div class="panel">
         <h3 style="margin-top:0">Standings</h3>
         <table class="standings-table">
           <thead><tr><th>#</th><th>Player</th><th>Status</th><th>Stack</th><th>Rebuys</th><th>Payout</th></tr></thead>
@@ -355,6 +383,13 @@ export async function renderTournamentDetail(root, tournamentId, navigate, curre
       const currentRow = blindBody.children[t.currentLevel];
       if (currentRow) currentRow.scrollIntoView({ block: "center" });
     }
+
+    const payoutsBody = wrap.querySelector("#payouts-body");
+    (t.payoutPreview || []).forEach((amount, i) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${ordinal(i + 1)}</td><td>${amount} chips</td>`;
+      payoutsBody.appendChild(tr);
+    });
 
     const tbody = wrap.querySelector("#standings-body");
     t.standings.forEach((s, i) => {
