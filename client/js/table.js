@@ -118,9 +118,14 @@ export function renderTable(root, tableId, currentUser, navigate, opts = {}) {
     // bust (t.you.zeroAt) -- if you don't hit Rebuy before it runs out,
     // you're auto-eliminated. This countdown ticks down locally every
     // second so it's obvious the clock is actually running.
+    //
+    // Checked against the live websocket seat (lastState), not t.you.stack --
+    // the tournament API's stack number only refreshes when a hand settles,
+    // so once you're actually stuck at 0 it can lag behind reality.
     stopRebuyCountdown();
+    const liveStack = lastState && lastState.yourSeat != null ? lastState.seats[lastState.yourSeat]?.stack ?? 0 : null;
     let rebuyHtml = "";
-    if (t.rebuyAllowed && t.you.registered && t.you.status === "active" && (t.you.stack ?? 0) <= 0) {
+    if (t.rebuyAllowed && t.you.registered && t.you.status === "active" && liveStack != null && liveStack <= 0) {
       const secsLeft = t.you.zeroAt != null ? Math.max(0, 25 - Math.floor((Date.now() - t.you.zeroAt) / 1000)) : 25;
       rebuyHtml = `<div class="stat rank-banner"><button id="sidebar-rebuy-btn" class="primary">Rebuy — ${t.rebuyPrice} chips (<span id="rebuy-countdown">${secsLeft}</span>s)</button></div>`;
     }
