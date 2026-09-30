@@ -460,6 +460,11 @@ export class TournamentManager {
     const table = new Table(variant, stakes, t.table_size, `${t.name} — Table ${tableNo + 1}`, {
       tournamentMode: true,
       onPlayerBusted: (userId) => this.handleBust(t.id, userId),
+      // This is the only thing that keeps entry.stack in the database
+      // honest after the initial seat -- without it, every check that reads
+      // "is this player at 0" from the DB (the rebuy-elimination sweep, the
+      // rebuy button's own visibility) is looking at a frozen, wrong number.
+      onStackUpdate: (userId, stack) => setEntryStackStmt.run(stack, t.id, userId),
     });
     table.setBlinds(level.smallBlind, level.bigBlind, level.ante);
     tableManager.addTournamentTable(table);
@@ -567,7 +572,14 @@ export class TournamentManager {
   }
 
   /** Sweeps running tournaments for players stuck at 0 chips whose 25-second
-   * rebuy clock has run out without a rebuy -- eliminates them for real. */
+   * rebuy clock has run out without a rebuy -- eliminates them for real.
+   *
+   * Deliberately checks the LIVE table's actual seat stack (table.stackOf)
+   * for this, not the persisted entry.stack column: that column only gets
+   * refreshed when a hand settles (see onStackUpdate in makeTable()), and a
+   * player sitting at 0 never plays another hand to trigger that refresh --
+   * so trusting the DB number here would mean a stuck player is never
+   * detected as stuck at all. */
   sweepExpiredRebuys(): void {
     const now = Date.now();
     const running = listByStatusStmt.all("running") as unknown as TournamentRow[];
@@ -575,9 +587,19 @@ export class TournamentManager {
       if (!t.rebuy_allowed) continue;
       const live = this.live.get(t.id);
       if (!live) continue;
-      const stuck = (listActiveEntriesStmt.all(t.id) as unknown as EntryRow[]).filter((e) => e.stack <= 0);
+      const active = listActiveEntriesStmt.all(t.id) as unknown as EntryRow[];
       let anyEliminated = false;
-      for (const e of stuck) {
+      for (const e of active) {
+        const table = e.table_no !== null ? live.tables.get(e.table_no) : undefined;
+        // Real, current chip count: null means they're not seated at this
+        // table at all (a ghost left behind by an old bug or a restart),
+        // which is just as stuck as sitting at exactly 0.
+        const liveStack = table ? table.stackOf(e.user_id) : null;
+        if (liveStack != null && liveStack > 0) continue; // genuinely still playing
+        // Keep the persisted number honest for anything else that reads it
+        // (the rebuy button's visibility, the standings table).
+        if (e.stack !== 0) setEntryStackStmt.run(0, t.id, e.user_id);
+
         if (e.zero_at == null) {
           // Covers any entry that hit 0 before this clock existed, or was
           // otherwise missed -- starts their 25 seconds now instead of
@@ -586,7 +608,6 @@ export class TournamentManager {
           continue;
         }
         if (now - e.zero_at < REBUY_DECISION_MS) continue;
-        const table = e.table_no !== null ? live.tables.get(e.table_no) : undefined;
         table?.eliminateSeat(e.user_id);
         this.finalizeElimination(t.id, e.user_id);
         anyEliminated = true;
@@ -630,8 +651,12 @@ export class TournamentManager {
     if (!t || t.status !== "running") throw new Error("Tournament is not running");
     const entry = this.entryFor(tournamentId, userId);
     if (!entry || entry.status !== "active") throw new Error("Player is not active in this tournament");
-    if (entry.stack > 0) throw new Error("Player still has chips -- can't force-eliminate them");
     const table = this.tableFor(tournamentId, userId);
+    // Check the live table, not entry.stack -- that persisted number only
+    // refreshes when a hand settles, and a player already stuck at 0 never
+    // plays another one, so it can be stale and wrong.
+    const liveStack = table ? table.stackOf(userId) : null;
+    if (liveStack != null && liveStack > 0) throw new Error("Player still has chips -- can't force-eliminate them");
     table?.eliminateSeat(userId);
     this.finalizeElimination(tournamentId, userId);
     this.rebalance(tournamentId);
