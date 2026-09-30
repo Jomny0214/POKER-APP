@@ -56,6 +56,7 @@ export interface EntryRow {
   payout: number | null;
   registered_at: number;
   busted_at: number | null;
+  zero_at: number | null;
 }
 
 export interface CreateTournamentInput {
@@ -75,6 +76,10 @@ export interface CreateTournamentInput {
 }
 
 const BALANCE_IMBALANCE_THRESHOLD = 2; // keep tables within this many players of each other
+
+// Zero chips, rebuys on: you get exactly this long to hit Rebuy before
+// you're auto-eliminated. Same fixed clock every time, for every player.
+const REBUY_DECISION_MS = 25_000;
 
 // ---------------------------------------------------------------------
 // Prepared statements
@@ -138,6 +143,12 @@ const bustEntryStmt = db.prepare(
 );
 const rebuyEntryStmt = db.prepare(
   `UPDATE tournament_entries SET rebuys_used = rebuys_used + 1 WHERE tournament_id = ? AND user_id = ?`
+);
+const markZeroAtStmt = db.prepare(
+  `UPDATE tournament_entries SET zero_at = ? WHERE tournament_id = ? AND user_id = ?`
+);
+const clearZeroAtStmt = db.prepare(
+  `UPDATE tournament_entries SET zero_at = NULL WHERE tournament_id = ? AND user_id = ?`
 );
 const payoutEntryStmt = db.prepare(`UPDATE tournament_entries SET payout = ? WHERE tournament_id = ? AND user_id = ?`);
 
@@ -244,15 +255,14 @@ export class TournamentManager {
       levels = preset;
     }
 
-    let rebuyPeriodType: "levels" | "minutes" | null = null;
-    let rebuyPeriodValue: number | null = null;
+    // No tournament-wide rebuy window anymore -- busting to 0 with rebuys on
+    // starts a fixed 25-second personal clock (see REBUY_DECISION_MS), same
+    // for every player every time. These two columns are kept only so old
+    // rows still read back cleanly; nothing reads them to gate anything.
+    const rebuyPeriodType: "levels" | "minutes" | null = null;
+    const rebuyPeriodValue: number | null = null;
     let rebuyPrice = 0;
     if (input.rebuyAllowed) {
-      rebuyPeriodType = input.rebuyPeriodType === "minutes" ? "minutes" : "levels";
-      rebuyPeriodValue = Number(input.rebuyPeriodValue);
-      if (!Number.isFinite(rebuyPeriodValue) || rebuyPeriodValue <= 0) {
-        throw new Error("Rebuy period must be a positive number of levels or minutes");
-      }
       rebuyPrice = Number(input.rebuyPrice);
       if (!Number.isFinite(rebuyPrice) || rebuyPrice <= 0) throw new Error("Rebuy price must be a positive number");
     }
@@ -418,7 +428,9 @@ export class TournamentManager {
     if (!entry || entry.status !== "active" || entry.stack > 0) {
       throw new Error("You don't currently have a rebuy available");
     }
-    if (!this.rebuyWindowOpen(t)) throw new Error("The rebuy period has ended");
+    if (entry.zero_at != null && Date.now() - entry.zero_at >= REBUY_DECISION_MS) {
+      throw new Error("Too late -- your 25 seconds to rebuy ran out");
+    }
     const table = this.tableFor(tournamentId, userId);
     if (!table) throw new Error("Not seated at a table");
 
@@ -426,20 +438,11 @@ export class TournamentManager {
       debit(userId, "tournament_rebuy", t.rebuy_price, `tournament-rebuy-${tournamentId}`);
       rebuyEntryStmt.run(tournamentId, userId);
       setEntryStackStmt.run(t.starting_stack, tournamentId, userId);
+      clearZeroAtStmt.run(tournamentId, userId);
       updatePrizePoolStmt.run(t.rebuy_price, tournamentId);
     });
     table.rebuyPlayer(userId, t.starting_stack);
     return this.entryFor(tournamentId, userId)!;
-  }
-
-  private rebuyWindowOpen(t: TournamentRow): boolean {
-    if (!t.rebuy_allowed) return false;
-    if (t.rebuy_period_type === "minutes") {
-      const startedAt = t.started_at ?? Date.now();
-      return Date.now() - startedAt < (t.rebuy_period_value ?? 0) * 60_000;
-    }
-    // "levels": rebuys allowed through the end of level N (1-indexed for the admin)
-    return t.current_level < (t.rebuy_period_value ?? 0);
   }
 
   // -------------------------------------------------------------------
@@ -563,21 +566,32 @@ export class TournamentManager {
     }
   }
 
-  /** Sweeps running tournaments for players who busted during their rebuy
-   * window but never rebought before it closed -- finalizes their elimination. */
+  /** Sweeps running tournaments for players stuck at 0 chips whose 25-second
+   * rebuy clock has run out without a rebuy -- eliminates them for real. */
   sweepExpiredRebuys(): void {
+    const now = Date.now();
     const running = listByStatusStmt.all("running") as unknown as TournamentRow[];
     for (const t of running) {
-      if (!t.rebuy_allowed || this.rebuyWindowOpen(t)) continue;
+      if (!t.rebuy_allowed) continue;
       const live = this.live.get(t.id);
       if (!live) continue;
-      const stillWaiting = (listActiveEntriesStmt.all(t.id) as unknown as EntryRow[]).filter((e) => e.stack <= 0);
-      for (const e of stillWaiting) {
+      const stuck = (listActiveEntriesStmt.all(t.id) as unknown as EntryRow[]).filter((e) => e.stack <= 0);
+      let anyEliminated = false;
+      for (const e of stuck) {
+        if (e.zero_at == null) {
+          // Covers any entry that hit 0 before this clock existed, or was
+          // otherwise missed -- starts their 25 seconds now instead of
+          // leaving them stuck with no clock running at all.
+          markZeroAtStmt.run(now, t.id, e.user_id);
+          continue;
+        }
+        if (now - e.zero_at < REBUY_DECISION_MS) continue;
         const table = e.table_no !== null ? live.tables.get(e.table_no) : undefined;
         table?.eliminateSeat(e.user_id);
         this.finalizeElimination(t.id, e.user_id);
+        anyEliminated = true;
       }
-      if (stillWaiting.length > 0) this.rebalance(t.id);
+      if (anyEliminated) this.rebalance(t.id);
     }
   }
 
@@ -594,10 +608,29 @@ export class TournamentManager {
     // otherwise fire this callback twice after the tournament has already
     // finished off the first bust.
     if (!entry || entry.status !== "active") return;
-    if (this.rebuyWindowOpen(t)) {
-      // Leave the seat in place, stack 0, awaiting a rebuy -- nothing else to do.
+    if (t.rebuy_allowed) {
+      // Leave the seat in place, stack 0, and start their 25-second rebuy
+      // clock -- sweepExpiredRebuys() eliminates them for real if it runs
+      // out without a rebuy.
+      markZeroAtStmt.run(Date.now(), tournamentId, userId);
       return;
     }
+    const table = this.tableFor(tournamentId, userId);
+    table?.eliminateSeat(userId);
+    this.finalizeElimination(tournamentId, userId);
+    this.rebalance(tournamentId);
+  }
+
+  /** Admin override: immediately eliminates a player sitting at 0 chips,
+   * instead of waiting for their tournament's rebuy window to close on its
+   * own. Only valid for a player who is actually stuck at 0 -- this is not
+   * a general kick/ban tool. */
+  adminEliminate(tournamentId: string, userId: string): void {
+    const t = this.get(tournamentId);
+    if (!t || t.status !== "running") throw new Error("Tournament is not running");
+    const entry = this.entryFor(tournamentId, userId);
+    if (!entry || entry.status !== "active") throw new Error("Player is not active in this tournament");
+    if (entry.stack > 0) throw new Error("Player still has chips -- can't force-eliminate them");
     const table = this.tableFor(tournamentId, userId);
     table?.eliminateSeat(userId);
     this.finalizeElimination(tournamentId, userId);
