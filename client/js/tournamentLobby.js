@@ -162,18 +162,7 @@ function renderCreateForm(mount, onDone, existing = null) {
       </label>
       <label><input id="f-rebuy" type="checkbox" style="width:auto" ${!isEdit || existing.rebuyAllowed ? "checked" : ""} /> Allow rebuys / re-entry</label>
       <label>Rebuy price<input id="f-rebuy-price" type="number" min="1" value="${isEdit && existing.rebuyPrice ? existing.rebuyPrice : 1000}" /></label>
-      <label>Rebuy window type
-        <select id="f-rebuy-type">
-          <option value="levels" ${!isEdit || existing.rebuyPeriodType === "levels" ? "selected" : ""}>First N levels</option>
-          <option value="minutes" ${isEdit && existing.rebuyPeriodType === "minutes" ? "selected" : ""}>First N minutes</option>
-        </select>
-      </label>
-      <label>Rebuy window value<input id="f-rebuy-value" type="number" min="1" value="${isEdit && existing.rebuyPeriodValue ? existing.rebuyPeriodValue : 14}" /></label>
-      ${
-        isEdit
-          ? ""
-          : `<div class="meta span-2" style="margin-top:-6px">Default of 14 "levels" matches the house structure's re-entry window (through the end of real level 13; the extra 1 accounts for the break that falls before it).</div>`
-      }
+      <div class="meta span-2" style="margin-top:-6px">Anyone who busts to 0 chips gets a fixed 25 seconds to hit Rebuy, or they're eliminated automatically -- same for everyone, every time.</div>
     </div>
     <div class="row" style="margin-top:14px">
       <button class="primary" id="f-submit">${isEdit ? "Save Changes" : "Create Tournament"}</button>
@@ -188,7 +177,7 @@ function renderCreateForm(mount, onDone, existing = null) {
   });
 
   const rebuyChk = mount.querySelector("#f-rebuy");
-  const rebuyFields = ["#f-rebuy-price", "#f-rebuy-type", "#f-rebuy-value"].map((s) => mount.querySelector(s));
+  const rebuyFields = ["#f-rebuy-price"].map((s) => mount.querySelector(s));
   const syncRebuyFields = () => {
     for (const el of rebuyFields) el.disabled = !rebuyChk.checked;
   };
@@ -216,8 +205,6 @@ function renderCreateForm(mount, onDone, existing = null) {
       };
       if (rebuyChk.checked) {
         input.rebuyPrice = Number(mount.querySelector("#f-rebuy-price").value);
-        input.rebuyPeriodType = mount.querySelector("#f-rebuy-type").value;
-        input.rebuyPeriodValue = Number(mount.querySelector("#f-rebuy-value").value);
       }
       if (presetSel.value === "custom") {
         input.customBlindSchedule = JSON.parse(mount.querySelector("#f-custom").value);
@@ -353,7 +340,7 @@ export async function renderTournamentDetail(root, tournamentId, navigate, curre
       <div class="panel">
         <h3 style="margin-top:0">Standings</h3>
         <table class="standings-table">
-          <thead><tr><th>#</th><th>Player</th><th>Status</th><th>Stack</th><th>Rebuys</th><th>Payout</th></tr></thead>
+          <thead><tr><th>#</th><th>Player</th><th>Status</th><th>Stack</th><th>Rebuys</th><th>Payout</th>${currentUser?.isAdmin ? "<th></th>" : ""}</tr></thead>
           <tbody id="standings-body"></tbody>
         </table>
       </div>
@@ -404,8 +391,33 @@ export async function renderTournamentDetail(root, tournamentId, navigate, curre
         <td>${s.status === "busted" ? "—" : s.stack}</td>
         <td>${s.rebuysUsed || 0}</td>
         <td>${s.payout ?? "—"}</td>
+        ${
+          currentUser?.isAdmin
+            ? `<td>${
+                s.status === "active" && s.stack <= 0
+                  ? `<button class="danger" data-eliminate-user="${s.userId}">Eliminate</button>`
+                  : ""
+              }</td>`
+            : ""
+        }
       `;
       tbody.appendChild(tr);
+    });
+
+    wrap.querySelectorAll("[data-eliminate-user]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const userId = btn.getAttribute("data-eliminate-user");
+        if (!confirm("Eliminate this player now instead of waiting out the rebuy window?")) return;
+        btn.disabled = true;
+        try {
+          await api.adminEliminatePlayer(tournamentId, userId);
+          toast("Player eliminated");
+          load();
+        } catch (err) {
+          toast(err.message, "error");
+          btn.disabled = false;
+        }
+      });
     });
 
     const regBtn = wrap.querySelector("#reg-btn");
