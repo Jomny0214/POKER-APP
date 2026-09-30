@@ -16,7 +16,13 @@ export interface Seat {
   stack: number;
   sittingOut: boolean;
   leavingAfterHand: boolean;
+  /** Consecutive hands this seat's action was forced by the 25s clock (auto-fold
+   * or auto-check), not chosen by the player. Any real action from handleAction()/
+   * handleDraw() resets this to 0. Hits AUTO_SITOUT_STRIKES -> auto sit-out. */
+  consecutiveTimeouts: number;
 }
+
+const AUTO_SITOUT_STRIKES = 3;
 
 interface Subscriber {
   conn: WSConnection;
@@ -48,6 +54,13 @@ export interface TableOptions {
   tournamentMode?: boolean;
   /** tournamentMode only: fired when a seated player's stack hits 0. */
   onPlayerBusted?: (userId: string, seatIndex: number) => void;
+  /** tournamentMode only: fired after every settled hand for every still-seated
+   * player, with their new stack -- the only way the tournament's persisted
+   * entry.stack (used to detect "stuck at 0" and to show/hide the rebuy
+   * button) ever learns what actually happened at the table. Without this,
+   * that persisted number is frozen at whatever it was when the player sat
+   * down or last rebought, no matter how much play happens afterward. */
+  onStackUpdate?: (userId: string, stack: number) => void;
 }
 
 export class Table {
@@ -114,6 +127,7 @@ export class Table {
       stack,
       sittingOut: false,
       leavingAfterHand: false,
+      consecutiveTimeouts: 0,
     };
     this.maybeStartHand();
     this.broadcast();
@@ -125,6 +139,7 @@ export class Table {
     if (!seat) throw new Error("Not seated at this table");
     seat.stack += addStack;
     seat.sittingOut = false;
+    seat.consecutiveTimeouts = 0;
     this.maybeStartHand();
     this.broadcast();
   }
@@ -190,6 +205,16 @@ export class Table {
     return !!this.seatOf(userId);
   }
 
+  /** Public read of a seated player's REAL, current chip count. The
+   * tournament layer's own persisted entry.stack only gets refreshed at
+   * hand-settlement time (via onStackUpdate) or seating/rebuy time -- this
+   * is the one place that's never stale, since it reads the live seat
+   * directly. Returns null if the user isn't seated here at all. */
+  stackOf(userId: string): number | null {
+    const seat = this.seatOf(userId);
+    return seat ? seat.stack : null;
+  }
+
   occupiedCount(): number {
     return this.seats.filter((s) => s !== null).length;
   }
@@ -213,6 +238,7 @@ export class Table {
       stack: buyIn,
       sittingOut: false,
       leavingAfterHand: false,
+      consecutiveTimeouts: 0,
     };
     this.maybeStartHand();
     this.broadcast();
@@ -251,7 +277,13 @@ export class Table {
     const seat = this.seatOf(userId);
     if (!seat) return;
     seat.sittingOut = sittingOut;
-    if (!sittingOut) this.maybeStartHand();
+    if (!sittingOut) {
+      // Manually choosing to sit back in clears the strike count -- it's a
+      // fresh start, not a continuation of whatever run of timeouts got them
+      // auto-sat-out in the first place.
+      seat.consecutiveTimeouts = 0;
+      this.maybeStartHand();
+    }
     this.broadcast();
   }
 
@@ -306,6 +338,8 @@ export class Table {
     const actor = this.engine.currentActor();
     if (actor !== userId) throw new Error("Not your turn");
     this.clearActionTimer();
+    const seat = this.seatOf(userId);
+    if (seat) seat.consecutiveTimeouts = 0;
     let a: PlayerAction;
     if (action.type === "bet") a = { type: "bet", to: Number(action.to) };
     else if (action.type === "raise") a = { type: "raise", to: Number(action.to) };
@@ -320,6 +354,8 @@ export class Table {
   handleDraw(userId: string, discardIndices: number[]): void {
     if (!this.engine) throw new Error("No hand in progress");
     this.clearActionTimer();
+    const seat = this.seatOf(userId);
+    if (seat) seat.consecutiveTimeouts = 0;
     this.engine.draw(userId, discardIndices);
     this.afterEngineUpdate();
   }
@@ -360,6 +396,7 @@ export class Table {
   private autoAct(userId: string): void {
     if (!this.engine || this.engine.isComplete()) return;
     if (this.engine.currentActor() !== userId) return;
+    this.registerTimeoutStrike(userId);
     const phase = this.engine.getPublicState().phase;
     if (typeof phase === "string" && phase.startsWith("draw")) {
       // time's up: stand pat
@@ -374,6 +411,20 @@ export class Table {
     this.afterEngineUpdate();
   }
 
+  /** Tracks the 25-second-timeout strike for a seat. Three timed-out actions
+   * in a row (fold, or check when there was nothing to call) auto-sits them
+   * out, so an AFK player stops getting dealt into new hands until they
+   * choose to sit back in. Any real action resets the count to 0. */
+  private registerTimeoutStrike(userId: string): void {
+    const seat = this.seatOf(userId);
+    if (!seat) return;
+    seat.consecutiveTimeouts += 1;
+    if (seat.consecutiveTimeouts >= AUTO_SITOUT_STRIKES) {
+      seat.sittingOut = true;
+      seat.consecutiveTimeouts = 0;
+    }
+  }
+
   private settleHand(): void {
     if (!this.engine) return;
     const result = this.engine.getResult();
@@ -382,6 +433,11 @@ export class Table {
     for (const pv of state.players) {
       const seat = this.seatOf(pv.id);
       if (seat) seat.stack = pv.stack;
+    }
+    if (this.opts.tournamentMode) {
+      for (const pv of state.players) {
+        this.opts.onStackUpdate?.(pv.id, pv.stack);
+      }
     }
     // Cash-game rake: taken out of each winner's share of each pot, after
     // the engine's own (unraked) pot math has already been applied above.
