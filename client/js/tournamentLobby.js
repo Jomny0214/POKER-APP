@@ -232,7 +232,14 @@ function renderCreateForm(mount, onDone, existing = null) {
 export async function renderTournamentDetail(root, tournamentId, navigate, currentUser) {
   root.innerHTML = `<div class="tourney-detail" id="tourney-detail-root">Loading...</div>`;
 
+  // The page auto-refreshes on a timer (see pollInterval below). A refresh
+  // rebuilds the whole panel from scratch, which would wipe out the edit
+  // form mid-edit -- looks like the form "closes itself" a few seconds after
+  // opening it. Skip the rebuild entirely while the edit form is open.
+  let editOpen = false;
+
   async function load() {
+    if (editOpen) return;
     let t;
     try {
       t = await api.tournament(tournamentId);
@@ -413,11 +420,14 @@ export async function renderTournamentDetail(root, tournamentId, navigate, curre
         const editMount = wrap.querySelector("#edit-tourney-mount");
         if (editMount.innerHTML) {
           editMount.innerHTML = "";
+          editOpen = false;
         } else {
+          editOpen = true;
           renderCreateForm(
             editMount,
             (saved) => {
               editMount.innerHTML = "";
+              editOpen = false;
               if (saved) load();
             },
             t
