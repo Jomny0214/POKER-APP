@@ -5,6 +5,12 @@ export function renderAuth(root, onAuthed) {
 
   function render() {
     root.innerHTML = "";
+    const logo = document.createElement("img");
+    logo.src = "/icons/logo-full.png";
+    logo.alt = "Apex Poker";
+    logo.style.cssText = "display:block;max-width:220px;width:70%;margin:0 auto 18px;";
+    root.appendChild(logo);
+
     const box = document.createElement("div");
     box.className = "auth-box";
 
