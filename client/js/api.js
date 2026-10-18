@@ -40,7 +40,10 @@ export const api = {
   balance: () => request("/api/wallet/balance"),
   history: () => request("/api/wallet/history"),
   deposit: (amount) => request("/api/wallet/deposit", { method: "POST", body: JSON.stringify({ amount }) }),
-  withdraw: (amount) => request("/api/wallet/withdraw", { method: "POST", body: JSON.stringify({ amount }) }),
+  withdraw: (amount) => request("/api/wallet/withdraw", { method: "POST", body: JSON.stringify({ amount }) }),  redeemBonus: (code) => request("/api/wallet/redeem-bonus", { method: "POST", body: JSON.stringify({ code }) }),
+  adminCreateBonusCode: (code, amount) =>
+    request("/api/admin/bonus-codes", { method: "POST", body: JSON.stringify({ code, amount }) }),
+  adminListBonusCodes: () => request("/api/admin/bonus-codes"),
   adminCredit: (username, amount) =>
     request("/api/admin/credit", { method: "POST", body: JSON.stringify({ username, amount }) }),
   adminPlayers: () => request("/api/admin/players"),
