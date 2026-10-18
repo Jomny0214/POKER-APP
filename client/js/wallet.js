@@ -25,7 +25,6 @@ export function renderWalletPanel(container, onBalanceChange, currentUser) {
         <button id="admin-players-refresh" title="Refresh player list">Refresh list</button>
       </div>
       <div class="row" style="margin-top:6px">
-              <div class="row" style="margin-top:6px">
         <input id="admin-credit-amount" type="number" min="1" placeholder="Amount" value="500" />
         <button class="primary" id="admin-credit-btn">Credit</button>
       </div>
@@ -39,7 +38,6 @@ export function renderWalletPanel(container, onBalanceChange, currentUser) {
       </div>
       <div id="bonus-code-list" class="meta" style="font-size:12px;color:var(--text-dim);margin-top:6px"></div>
       `
-      `
           : `
       <div class="row">
         <button id="withdraw-btn">Withdraw</button>
@@ -49,6 +47,13 @@ export function renderWalletPanel(container, onBalanceChange, currentUser) {
       </div>
       `
       }
+      <div class="meta" style="font-size:12px;color:var(--text-dim);margin-top:10px">
+        <strong>Have a bonus code?</strong>
+      </div>
+      <div class="row">
+        <input id="bonus-code-redeem" type="text" placeholder="Enter code" style="text-transform:uppercase" />
+        <button class="primary" id="bonus-code-redeem-btn">Redeem</button>
+      </div>
     </div>
   `;
 
@@ -81,11 +86,42 @@ export function renderWalletPanel(container, onBalanceChange, currentUser) {
     }
   }
 
+  async function loadBonusCodes() {
+    const list = container.querySelector("#bonus-code-list");
+    if (!list) return;
+    try {
+      const { codes } = await api.adminListBonusCodes();
+      list.innerHTML = codes.length
+        ? codes.map((c) => `${c.code}: ${c.amount} chips (${c.redemptions} redeemed)`).join("<br>")
+        : "No bonus codes yet.";
+    } catch (err) {
+      list.textContent = "Failed to load bonus codes.";
+    }
+  }
+
   if (isAdmin) {
     loadPlayers().catch(() => {});
+    loadBonusCodes().catch(() => {});
 
     container.querySelector("#admin-players-refresh").addEventListener("click", () => {
       loadPlayers().catch((e) => toast(e.message, "error"));
+    });
+
+    container.querySelector("#bonus-code-create-btn").addEventListener("click", async () => {
+      const code = container.querySelector("#bonus-code-new").value.trim();
+      const amount = Number(container.querySelector("#bonus-code-amount").value);
+      if (!code) {
+        toast("Enter a code first", "error");
+        return;
+      }
+      try {
+        await api.adminCreateBonusCode(code, amount);
+        toast(`Created bonus code ${code.toUpperCase()}`);
+        container.querySelector("#bonus-code-new").value = "";
+        await loadBonusCodes();
+      } catch (err) {
+        toast(err.message, "error");
+      }
     });
 
     container.querySelector("#deposit-btn").addEventListener("click", async () => {
@@ -123,6 +159,23 @@ export function renderWalletPanel(container, onBalanceChange, currentUser) {
       await api.withdraw(amount);
       await refresh();
       toast(`Withdrew ${amount} chips`);
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  });
+
+  container.querySelector("#bonus-code-redeem-btn").addEventListener("click", async () => {
+    const input = container.querySelector("#bonus-code-redeem");
+    const code = input.value.trim();
+    if (!code) {
+      toast("Enter a code first", "error");
+      return;
+    }
+    try {
+      await api.redeemBonus(code);
+      await refresh();
+      toast(`Bonus code redeemed!`);
+      input.value = "";
     } catch (err) {
       toast(err.message, "error");
     }
