@@ -25,9 +25,20 @@ export function renderWalletPanel(container, onBalanceChange, currentUser) {
         <button id="admin-players-refresh" title="Refresh player list">Refresh list</button>
       </div>
       <div class="row" style="margin-top:6px">
+              <div class="row" style="margin-top:6px">
         <input id="admin-credit-amount" type="number" min="1" placeholder="Amount" value="500" />
         <button class="primary" id="admin-credit-btn">Credit</button>
       </div>
+      <div class="meta" style="font-size:12px;color:var(--text-dim);margin-top:10px">
+        <strong>Bonus codes (admin)</strong>
+      </div>
+      <div class="row">
+        <input id="bonus-code-new" type="text" placeholder="CODE e.g. BETA500" style="text-transform:uppercase" />
+        <input id="bonus-code-amount" type="number" min="1" placeholder="Amount" value="500" style="max-width:100px" />
+        <button class="primary" id="bonus-code-create-btn">Create</button>
+      </div>
+      <div id="bonus-code-list" class="meta" style="font-size:12px;color:var(--text-dim);margin-top:6px"></div>
+      `
       `
           : `
       <div class="row">
