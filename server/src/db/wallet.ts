@@ -11,7 +11,8 @@ export type LedgerType =
   | "tournament_buyin"
   | "tournament_cashout"
   | "tournament_rebuy"
-  | "tournament_payout";
+  | "tournament_payout"
+  | "bonus";
 
 export class InsufficientFundsError extends Error {
   constructor() {
