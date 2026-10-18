@@ -28,7 +28,8 @@ import {
   approveDepositRequest,
   rejectDepositRequest,
 } from "../db/deposits";
-import { submitKyc, getMyLatestKyc, listPendingKyc, getKycDetail, approveKyc, rejectKyc, getKycStatus, KycError } from "../db/kyc";import { createBonusCode, listBonusCodes, redeemBonusCode, BonusCodeError } from "../db/bonusCodes";
+import { submitKyc, getMyLatestKyc, listPendingKyc, getKycDetail, approveKyc, rejectKyc, getKycStatus, KycError } from "../db/kyc";
+import { createBonusCode, listBonusCodes, redeemBonusCode, BonusCodeError } from "../db/bonusCodes";
 import {
   sendPlayerMessage,
   sendAdminMessage,
@@ -180,56 +181,8 @@ router.post("/api/wallet/deposit", async (ctx) => {
     sendJson(ctx.res, 400, { error: "Invalid amount" });
     return;
   }
-    const balance = credit(target.id, "deposit", amount, `admin-credit-by-${requester.id}`);
-  sendJson(ctx.res, 200, { balance, username: target.username });
-});
-
-// Admin: create a one-time-per-account bonus code (e.g. a beta-invite code
-// worth a fixed chip amount), so a whole batch of testers can each self-serve
-// their starting chips instead of the admin crediting every account by hand.
-router.post("/api/admin/bonus-codes", async (ctx) => {
-  requireAuth(ctx);
-  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
-  if (!requester || !isAdmin(requester)) {
-    sendJson(ctx.res, 403, { error: "Admin only" });
-    return;
-  }
-  const body = ctx.body as { code?: string; amount?: number };
-  try {
-    const row = createBonusCode(body.code ?? "", Number(body.amount), requester.id);
-    sendJson(ctx.res, 201, { code: row });
-  } catch (err) {
-    sendJson(ctx.res, 400, { error: (err as Error).message });
-  }
-});
-
-// Admin: see every bonus code and how many accounts have redeemed each one.
-router.get("/api/admin/bonus-codes", async (ctx) => {
-  requireAuth(ctx);
-  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
-  if (!requester || !isAdmin(requester)) {
-    sendJson(ctx.res, 403, { error: "Admin only" });
-    return;
-  }
-  sendJson(ctx.res, 200, { codes: listBonusCodes() });
-});
-
-// Player: redeem a bonus code for its chips. Each account can redeem any
-// given code exactly once -- enforced in bonusCodes.ts via a unique
-// (code, user_id) row, not by anything the client checks.
-router.post("/api/wallet/redeem-bonus", async (ctx) => {
-  const userId = requireAuth(ctx);
-  const body = ctx.body as { code?: string };
-  try {
-    const balance = redeemBonusCode(body.code ?? "", userId);
-    sendJson(ctx.res, 200, { balance });
-  } catch (err) {
-    const status = err instanceof BonusCodeError ? 400 : 500;
-    sendJson(ctx.res, status, { error: (err as Error).message });
-  }
-});
-
-router.post("/api/wallet/withdraw", async (ctx) => {
+  const balance = credit(userId, "deposit", amount, "simulated-deposit");
+  sendJson(ctx.res, 200, { balance });
 });
 
 // Admin-only: list every registered player and their current balance, so the
@@ -383,6 +336,51 @@ router.post("/api/admin/credit", async (ctx) => {
   }
   const balance = credit(target.id, "deposit", amount, `admin-credit-by-${requester.id}`);
   sendJson(ctx.res, 200, { balance, username: target.username });
+});
+
+// Admin: create a one-time-per-account bonus code (e.g. a beta-invite code
+// worth a fixed chip amount), so a whole batch of testers can each self-serve
+// their starting chips instead of the admin crediting every account by hand.
+router.post("/api/admin/bonus-codes", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  const body = ctx.body as { code?: string; amount?: number };
+  try {
+    const row = createBonusCode(body.code ?? "", Number(body.amount), requester.id);
+    sendJson(ctx.res, 201, { code: row });
+  } catch (err) {
+    sendJson(ctx.res, 400, { error: (err as Error).message });
+  }
+});
+
+// Admin: see every bonus code and how many accounts have redeemed each one.
+router.get("/api/admin/bonus-codes", async (ctx) => {
+  requireAuth(ctx);
+  const requester = resolveSession((ctx.req.headers.authorization ?? "").slice(7));
+  if (!requester || !isAdmin(requester)) {
+    sendJson(ctx.res, 403, { error: "Admin only" });
+    return;
+  }
+  sendJson(ctx.res, 200, { codes: listBonusCodes() });
+});
+
+// Player: redeem a bonus code for its chips. Each account can redeem any
+// given code exactly once -- enforced in bonusCodes.ts via a unique
+// (code, user_id) row, not by anything the client checks.
+router.post("/api/wallet/redeem-bonus", async (ctx) => {
+  const userId = requireAuth(ctx);
+  const body = ctx.body as { code?: string };
+  try {
+    const balance = redeemBonusCode(body.code ?? "", userId);
+    sendJson(ctx.res, 200, { balance });
+  } catch (err) {
+    const status = err instanceof BonusCodeError ? 400 : 500;
+    sendJson(ctx.res, status, { error: (err as Error).message });
+  }
 });
 
 router.post("/api/wallet/withdraw", async (ctx) => {
